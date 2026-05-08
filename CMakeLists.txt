@@ -96,6 +96,8 @@ add_library(AntivirusCommon STATIC
     src/common/app_paths.h
     src/common/logging.cpp
     src/common/logging.h
+    src/common/process_hardening.cpp
+    src/common/process_hardening.h
     src/common/win_error.cpp
     src/common/win_error.h
 )

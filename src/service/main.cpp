@@ -1,4 +1,5 @@
 #include "common/logging.h"
+#include "common/process_hardening.h"
 #include "service/ServiceMain.h"
 
 #include <iostream>
@@ -44,10 +45,12 @@ int wmain(int argc, wchar_t* argv[])
     }
 
     if (has_argument(args, L"--run-service")) {
+        antivirus::common::hardenCurrentProcessForDemo(L"AntivirusService.exe", true);
         return antivirus::service::runService();
     }
 
     if (has_argument(args, L"--console")) {
+        antivirus::common::hardenCurrentProcessForDemo(L"AntivirusService.exe console", true);
         return antivirus::service::runConsole();
     }
 
