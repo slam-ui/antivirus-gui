@@ -14,6 +14,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(InstallRequiredSystemLibraries)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION bin)
+
 if(WIN32)
     set(ANTIVIRUS_MIDL_SEARCH_PATHS)
     if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
@@ -160,7 +163,30 @@ if(ANTIVIRUS_BUILD_GUI)
 
     target_compile_definitions(AntivirusGui PRIVATE ANTIVIRUS_APP_VERSION="${PROJECT_VERSION}")
 
+    get_target_property(ANTIVIRUS_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(ANTIVIRUS_QT_BIN_DIR "${ANTIVIRUS_QMAKE_EXECUTABLE}" DIRECTORY)
+    find_program(ANTIVIRUS_WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${ANTIVIRUS_QT_BIN_DIR}" REQUIRED)
+
+    add_custom_command(TARGET AntivirusGui POST_BUILD
+        COMMAND "${ANTIVIRUS_WINDEPLOYQT_EXECUTABLE}"
+            --no-translations
+            --no-system-d3d-compiler
+            --no-opengl-sw
+            --dir "$<TARGET_FILE_DIR:AntivirusGui>"
+            "$<TARGET_FILE:AntivirusGui>"
+        VERBATIM
+    )
+
     install(TARGETS AntivirusGui RUNTIME DESTINATION bin)
+    install(DIRECTORY "$<TARGET_FILE_DIR:AntivirusGui>/"
+        DESTINATION bin
+        FILES_MATCHING
+            PATTERN "*.dll"
+            PATTERN "platforms/*"
+            PATTERN "styles/*"
+            PATTERN "imageformats/*"
+            PATTERN "tls/*"
+    )
 endif()
 
 if(ANTIVIRUS_BUILD_SERVICE)
@@ -213,3 +239,13 @@ endif()
 
 install(FILES README.md DESTINATION .)
 install(DIRECTORY docs/ DESTINATION docs)
+install(DIRECTORY installer/ DESTINATION installer)
+
+set(CPACK_PACKAGE_NAME "AntivirusGui")
+set(CPACK_PACKAGE_VENDOR "Antivirus Coursework")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Educational Windows antivirus GUI coursework project")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "AntivirusInstaller-${PROJECT_VERSION}-win64")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Antivirus GUI")
+set(CPACK_GENERATOR "ZIP")
+include(CPack)

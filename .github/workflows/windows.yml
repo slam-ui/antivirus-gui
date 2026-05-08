@@ -39,6 +39,9 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Package
+        run: cmake --build build --config Release --target package
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -46,3 +49,4 @@ jobs:
           path: |
             build/Release/AntivirusGui.exe
             build/Release/AntivirusService.exe
+            build/AntivirusInstaller-*.zip
