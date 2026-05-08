@@ -33,7 +33,7 @@ Packaging
 - `src/common`: shared utilities for paths, logging, and Windows error formatting.
 - `src/gui`: Qt Widgets GUI executable.
 - `src/service`: Windows service executable.
-- `rpc`: future RPC IDL and generated stubs.
+- `rpc`: Windows RPC IDL and generated RPC source files.
 - `installer`: future installer packaging files.
 - `docs`: assignment documentation and manual verification notes.
 
