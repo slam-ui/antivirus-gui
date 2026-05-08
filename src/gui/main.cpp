@@ -3,6 +3,7 @@
 #include "gui/MainWindow.h"
 #include "gui/ParentProcessCheck.h"
 #include "gui/RpcClient.h"
+#include "gui/security_hardening.h"
 #include "gui/ServiceClient.h"
 #include "gui/SingleInstanceGuard.h"
 #include "gui/TrayController.h"
@@ -42,6 +43,7 @@ int main(int argc, char* argv[])
     QApplication::setApplicationVersion(QStringLiteral(ANTIVIRUS_APP_VERSION));
     QApplication::setOrganizationName(QStringLiteral("Antivirus Coursework"));
     QApplication::setQuitOnLastWindowClosed(false);
+    antivirus::gui::applyGuiSecurityHardening();
 
     if (!allowStandaloneDebug) {
         antivirus::gui::ServiceClient serviceClient;
