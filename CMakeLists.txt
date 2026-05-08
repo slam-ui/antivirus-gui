@@ -96,6 +96,8 @@ add_library(AntivirusCommon STATIC
     src/common/app_paths.h
     src/common/logging.cpp
     src/common/logging.h
+    src/common/process_hardening.cpp
+    src/common/process_hardening.h
     src/common/win_error.cpp
     src/common/win_error.h
 )
@@ -114,7 +116,7 @@ target_compile_definitions(AntivirusCommon
 )
 
 if(MSVC)
-    target_compile_options(AntivirusCommon PRIVATE /W4 /permissive-)
+    target_compile_options(AntivirusCommon PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(AntivirusCommon PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -155,6 +157,12 @@ if(ANTIVIRUS_BUILD_GUI)
     )
 
     target_compile_definitions(AntivirusGui PRIVATE ANTIVIRUS_APP_VERSION="${PROJECT_VERSION}")
+
+    if(MSVC)
+        target_compile_options(AntivirusGui PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AntivirusGui PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
 
     install(TARGETS AntivirusGui RUNTIME DESTINATION bin)
 endif()
