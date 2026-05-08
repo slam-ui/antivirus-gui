@@ -4,7 +4,7 @@
 
 | Criterion | Status | Implementation |
 |-----------|--------|----------------|
-| CMake build for the whole app | Implemented | GUI, service, common library, and generated RPC stubs are built from `CMakeLists.txt`. |
+| CMake build for the whole app | Implemented | GUI, service, common library, and generated RPC source files are built from `CMakeLists.txt`. |
 | WinUI point | Not implemented | The project intentionally uses Qt 6 Widgets, which already satisfies the allowed GUI framework requirement. |
 | Secure Desktop stop confirmation | Implemented with standard Windows credential UI | RPC service stop calls `CredUIPromptForWindowsCredentialsW` with `CREDUIWIN_SECURE_PROMPT`, unpacks credentials, validates them with `LogonUserW`, zeroes password buffers, and proceeds only after success. |
 | DACL for service process | Implemented best-effort | `applyServiceSecurityHardening()` applies a process DACL denying `PROCESS_TERMINATE` to Builtin Users while allowing LocalSystem and Administrators. |

@@ -1,5 +1,7 @@
 # Antivirus GUI
 
+[![Windows](https://github.com/slam-ui/antivirus-gui/actions/workflows/windows.yml/badge.svg)](https://github.com/slam-ui/antivirus-gui/actions/workflows/windows.yml)
+
 Educational Windows C++20 project for antivirus GUI coursework. The project is intentionally limited to benign UI, service, IPC, authentication/licensing, and installer exercises. It does not implement malware behavior, process hiding, system protection bypasses, or real antivirus scanning.
 
 ## Covered Assignments
@@ -10,7 +12,12 @@ Educational Windows C++20 project for antivirus GUI coursework. The project is i
 - Extra points: CMake build, secure stop confirmation, and documented DACL hardening.
 - Task 2.6: Windows installer packaging.
 
-This initial scaffold provides the C++20/CMake structure, minimal GUI target, service target placeholder, documentation, and Windows CI.
+## Architecture
+
+- `AntivirusGui.exe`: Qt 6 Widgets GUI with tray icon, hidden mode, account/login UI, activation UI, and RPC client.
+- `AntivirusService.exe`: native Windows service with SCM install/uninstall, WTS session launch, local RPC server, auth/license state, secure stop confirmation, and process DACL hardening.
+- `rpc/AntivirusRpc.idl`: Windows RPC interface generated through MIDL and used over `ncalrpc`.
+- `installer`: CPack ZIP installer package with elevated install/uninstall scripts.
 
 ## Build
 
@@ -30,10 +37,10 @@ cmake --build build --config Release
 After building:
 
 ```powershell
-.\build\Release\AntivirusGui.exe
+.\build\Release\AntivirusGui.exe --allow-standalone-debug
 ```
 
-At the scaffold stage the GUI shows a minimal Qt Widgets window only. Tray and lifecycle behavior are implemented in Task 2.1.
+Production GUI instances are launched by the service with `--hidden --service-child`.
 
 ## Run Service
 
@@ -43,8 +50,38 @@ After building:
 .\build\Release\AntivirusService.exe --console
 ```
 
-At the scaffold stage the service executable is a console placeholder. Native Windows service behavior is implemented in Task 2.2.
+Service install/uninstall requires an elevated shell:
+
+```powershell
+.\build\Release\AntivirusService.exe --install
+sc.exe start AntivirusGuiService
+.\build\Release\AntivirusService.exe --uninstall
+```
+
+## Install
+
+Build the package:
+
+```powershell
+cmake --build build --config Release --target package
+```
+
+Extract `AntivirusInstaller-0.1.0-win64.zip`, open elevated PowerShell, and run:
+
+```powershell
+.\installer\install.ps1
+```
+
+Uninstall:
+
+```powershell
+.\installer\uninstall.ps1
+```
+
+## Demo
+
+Use [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the teacher-facing walkthrough and [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md) for requirement-by-requirement evidence.
 
 ## CI Artifacts
 
-The Windows workflow configures CMake, builds the Release targets, and uploads the built executables as artifacts.
+The Windows workflow configures CMake, builds Release targets, packages the installer ZIP, and uploads the executables plus installer artifact.

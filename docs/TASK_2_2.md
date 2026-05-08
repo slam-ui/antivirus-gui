@@ -8,13 +8,13 @@
 | Service | Track new user logons and launch GUI. | `ServiceMain` handles `SERVICE_CONTROL_SESSIONCHANGE` for logon/console/remote connect events. |
 | Service | Keep controlled stop through RPC for coursework. | SCM stop/shutdown controls are not accepted while running; RPC stop sets the service stop event. |
 | Service | Start Windows RPC server using `ncalrpc`. | `RpcServer` registers endpoint `AntivirusGuiRpc` over `ncalrpc`. Modern local RPC on Windows uses LPC/ALPC internally for local transport. |
-| Service | Register RPC interface for stop requests. | `rpc/AntivirusRpc.idl` defines `AvPing`, `AvRequestServiceStop`, and `AvGetServiceStatus`; CMake runs MIDL and links generated server stubs. |
+| Service | Register RPC interface for stop requests. | `rpc/AntivirusRpc.idl` defines `AvPing`, `AvRequestServiceStop`, and `AvGetServiceStatus`; CMake runs MIDL and links generated server sources. |
 | Service | Stop all launched GUI children on service stop. | `SessionManager::stopAllGuiChildren()` waits for owned children and terminates only owned GUI processes after timeout. |
 | GUI | Check Windows service state on startup. | `ServiceClient` queries SCM; if service is installed but stopped, GUI starts it, waits for `Running`, and exits. |
 | GUI | Verify parent process is this project service. | `ParentProcessCheck` checks the parent image name and production mode requires `AntivirusService.exe`; `--allow-standalone-debug` bypasses this only for debugging. |
 | GUI | `Файл -> Выход` stops service through RPC. | `AppLifecycle::quitApplication()` calls `RpcClient::requestServiceStop()`. |
 | GUI | Tray `Выход` stops service through RPC. | Tray action uses the same `AppLifecycle` path. |
-| CMake | Build generated RPC stubs. | `CMakeLists.txt` compiles `rpc/AntivirusRpc.idl` with MIDL and links generated client/server stubs into GUI/service targets. |
+| CMake | Build generated RPC sources. | `CMakeLists.txt` compiles `rpc/AntivirusRpc.idl` with MIDL and links generated client/server sources into GUI/service targets. |
 
 ## Commands
 
