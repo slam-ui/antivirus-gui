@@ -138,6 +138,8 @@ if(ANTIVIRUS_BUILD_GUI)
         src/gui/ParentProcessCheck.h
         src/gui/RpcClient.cpp
         src/gui/RpcClient.h
+        src/gui/SecureStopConfirmation.cpp
+        src/gui/SecureStopConfirmation.h
         src/gui/ServiceClient.cpp
         src/gui/ServiceClient.h
         src/gui/SingleInstanceGuard.cpp
@@ -153,6 +155,7 @@ if(ANTIVIRUS_BUILD_GUI)
             AntivirusRpcClient
             Qt6::Widgets
             Advapi32
+            Credui
             Rpcrt4
     )
 
