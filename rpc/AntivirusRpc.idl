@@ -59,4 +59,5 @@ interface AntivirusRpc
     void AvGetDatabaseInfo([in] handle_t binding, [out] AvDatabaseInfo* info);
     void AvScanFile([in] handle_t binding, [in, string] const wchar_t* path, [out] AvScanResult* result);
     void AvScanDirectory([in] handle_t binding, [in, string] const wchar_t* path, [out] AvScanResult* result);
+    void AvScanFixedDrives([in] handle_t binding, [out] AvScanResult* result);
 }

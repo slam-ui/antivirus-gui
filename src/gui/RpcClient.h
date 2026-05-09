@@ -59,6 +59,7 @@ public:
     DatabaseInfo databaseInfo() const;
     ScanResult scanFile(const QString& path) const;
     ScanResult scanDirectory(const QString& path) const;
+    ScanResult scanFixedDrives() const;
 };
 
 } // namespace antivirus::gui

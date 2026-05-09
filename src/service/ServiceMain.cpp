@@ -63,19 +63,19 @@ std::wstring buildFileScanDetails(const scan::FileScanReport& report)
     std::wstringstream stream;
 
     if (!report.result.error.empty()) {
-        stream << L"Ошибка: " << report.result.error;
+        stream << L"РћС€РёР±РєР°: " << report.result.error;
         return stream.str();
     }
 
-    stream << L"Файл: " << report.path.wstring() << L"\n";
-    stream << L"Тип объекта: " << report.result.objectType << L"\n";
+    stream << L"Р¤Р°Р№Р»: " << report.path.wstring() << L"\n";
+    stream << L"РўРёРї РѕР±СЉРµРєС‚Р°: " << report.result.objectType << L"\n";
 
     if (report.result.malicious) {
-        stream << L"Результат: обнаружена угроза\n";
-        stream << L"Угроза: " << report.result.threatName << L"\n";
-        stream << L"Смещение: " << report.result.detectionOffset;
+        stream << L"Р РµР·СѓР»СЊС‚Р°С‚: РѕР±РЅР°СЂСѓР¶РµРЅР° СѓРіСЂРѕР·Р°\n";
+        stream << L"РЈРіСЂРѕР·Р°: " << report.result.threatName << L"\n";
+        stream << L"РЎРјРµС‰РµРЅРёРµ: " << report.result.detectionOffset;
     } else {
-        stream << L"Результат: угроз не обнаружено";
+        stream << L"Р РµР·СѓР»СЊС‚Р°С‚: СѓРіСЂРѕР· РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ";
     }
 
     return stream.str();
@@ -86,23 +86,23 @@ std::wstring buildDirectoryScanDetails(const scan::DirectoryScanReport& report)
     std::wstringstream stream;
 
     if (!report.error.empty()) {
-        stream << L"Ошибка: " << report.error;
+        stream << L"РћС€РёР±РєР°: " << report.error;
         return stream.str();
     }
 
-    stream << L"Просканировано файлов: " << report.scannedFiles << L"\n";
-    stream << L"Обнаружено угроз: " << report.maliciousFiles;
+    stream << L"РџСЂРѕСЃРєР°РЅРёСЂРѕРІР°РЅРѕ С„Р°Р№Р»РѕРІ: " << report.scannedFiles << L"\n";
+    stream << L"РћР±РЅР°СЂСѓР¶РµРЅРѕ СѓРіСЂРѕР·: " << report.maliciousFiles;
 
     std::size_t shown = 0;
     for (const scan::FileScanReport& detection : report.detections) {
         if (shown >= 20) {
-            stream << L"\n... список обнаружений сокращен";
+            stream << L"\n... СЃРїРёСЃРѕРє РѕР±РЅР°СЂСѓР¶РµРЅРёР№ СЃРѕРєСЂР°С‰РµРЅ";
             break;
         }
 
-        stream << L"\n\nФайл: " << detection.path.wstring();
-        stream << L"\nУгроза: " << detection.result.threatName;
-        stream << L"\nСмещение: " << detection.result.detectionOffset;
+        stream << L"\n\nР¤Р°Р№Р»: " << detection.path.wstring();
+        stream << L"\nРЈРіСЂРѕР·Р°: " << detection.result.threatName;
+        stream << L"\nРЎРјРµС‰РµРЅРёРµ: " << detection.result.detectionOffset;
         ++shown;
     }
 
@@ -318,6 +318,102 @@ public:
         return result;
     }
 
+    RpcScanResult scanFixedDrives()
+    {
+        RpcScanResult result;
+        result.scannedPath = L"All fixed drives";
+
+        const FeatureState feature = featureState();
+        if (!feature.enabled) {
+            result.lastError = feature.blockedReason.empty() ? L"Feature is blocked" : feature.blockedReason;
+            result.details = result.lastError;
+            return result;
+        }
+
+        std::lock_guard lock(databaseMutex_);
+
+        if (!database_.loaded()) {
+            result.lastError = L"Antivirus database is not loaded";
+            result.details = result.lastError;
+            return result;
+        }
+
+        const DWORD driveMask = GetLogicalDrives();
+        if (driveMask == 0) {
+            result.lastError = L"Failed to enumerate logical drives";
+            result.details = result.lastError;
+            return result;
+        }
+
+        std::wstringstream stream;
+        stream << L"Scan target: all fixed drives";
+
+        bool scannedAnyDrive = false;
+        bool firstDetectionCaptured = false;
+
+        for (wchar_t letter = L'A'; letter <= L'Z'; ++letter) {
+            const DWORD bit = 1u << (letter - L'A');
+            if ((driveMask & bit) == 0) {
+                continue;
+            }
+
+            wchar_t root[] = {letter, L':', L'\\', L'\0'};
+            if (GetDriveTypeW(root) != DRIVE_FIXED) {
+                continue;
+            }
+
+            scannedAnyDrive = true;
+            stream << L"\n\nDrive: " << root;
+
+            const scan::DirectoryScanReport report = scanner_.scanDirectory(root, database_);
+
+            if (!report.error.empty()) {
+                stream << L"\nError: " << report.error;
+                continue;
+            }
+
+            result.scannedFiles += report.scannedFiles;
+            result.maliciousFiles += report.maliciousFiles;
+
+            stream << L"\nScanned files: " << report.scannedFiles;
+            stream << L"\nDetected threats: " << report.maliciousFiles;
+
+            if (!report.detections.empty() && !firstDetectionCaptured) {
+                const scan::FileScanReport& firstDetection = report.detections.front();
+                result.scannedPath = firstDetection.path.wstring();
+                result.threatName = firstDetection.result.threatName;
+                result.objectType = firstDetection.result.objectType;
+                result.detectionOffset = firstDetection.result.detectionOffset;
+                firstDetectionCaptured = true;
+            }
+
+            std::size_t shown = 0;
+            for (const scan::FileScanReport& detection : report.detections) {
+                if (shown >= 20) {
+                    stream << L"\n... detection list truncated";
+                    break;
+                }
+
+                stream << L"\nThreat: " << detection.result.threatName;
+                stream << L"\nFile: " << detection.path.wstring();
+                stream << L"\nOffset: " << detection.result.detectionOffset;
+                ++shown;
+            }
+        }
+
+        if (!scannedAnyDrive) {
+            result.lastError = L"No fixed drives found";
+            result.details = result.lastError;
+            return result;
+        }
+
+        result.scanned = true;
+        result.malicious = result.maliciousFiles > 0;
+        result.details = stream.str();
+
+        return result;
+    }
+
 private:
     void setStatus(DWORD state)
     {
@@ -513,6 +609,14 @@ RpcScanResult scanDirectoryFromRpc(const wchar_t* path)
     return g_runtime->scanDirectory(path);
 }
 
+RpcScanResult scanFixedDrivesFromRpc()
+{
+    if (g_runtime == nullptr) {
+        return RpcScanResult{.scannedPath = L"All fixed drives", .lastError = L"Service runtime unavailable"};
+    }
+
+    return g_runtime->scanFixedDrives();
+}
 int installService()
 {
     ServiceHandle scm(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CREATE_SERVICE));

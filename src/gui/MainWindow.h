@@ -26,6 +26,7 @@ private:
     void logout();
     void scanFile();
     void scanDirectory();
+    void scanFixedDrives();
 
     AppLifecycle& lifecycle_;
     RpcClient& rpcClient_;
@@ -35,6 +36,7 @@ private:
     QLabel* databaseLabel_ = nullptr;
     QPushButton* scanFileButton_ = nullptr;
     QPushButton* scanDirectoryButton_ = nullptr;
+    QPushButton* scanFixedDrivesButton_ = nullptr;
     QTextEdit* scanResultEdit_ = nullptr;
 };
 

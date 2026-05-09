@@ -261,4 +261,16 @@ ScanResult RpcClient::scanDirectory(const QString& path) const
     return convertScanResult(result);
 }
 
+ScanResult RpcClient::scanFixedDrives() const
+{
+    RpcBinding binding;
+    AvScanResult result{};
+    if (binding.get() == nullptr) {
+        return convertScanResult(result);
+    }
+
+    AvScanFixedDrives(binding.get(), &result);
+    return convertScanResult(result);
+}
+
 } // namespace antivirus::gui

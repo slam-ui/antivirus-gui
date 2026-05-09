@@ -51,5 +51,6 @@ FeatureState queryFeatureStateFromRpc();
 DatabaseInfo queryDatabaseInfoFromRpc();
 RpcScanResult scanFileFromRpc(const wchar_t* path);
 RpcScanResult scanDirectoryFromRpc(const wchar_t* path);
+RpcScanResult scanFixedDrivesFromRpc();
 
 } // namespace antivirus::service

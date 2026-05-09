@@ -208,3 +208,8 @@ void AvScanDirectory(handle_t, const wchar_t* path, AvScanResult* result)
 {
     antivirus::service::copyScanResult(antivirus::service::scanDirectoryFromRpc(path), result);
 }
+
+void AvScanFixedDrives(handle_t, AvScanResult* result)
+{
+    antivirus::service::copyScanResult(antivirus::service::scanFixedDrivesFromRpc(), result);
+}
