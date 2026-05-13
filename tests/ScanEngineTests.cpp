@@ -1,13 +1,21 @@
 #include "service/scan/AvDatabase.h"
+#include "service/scan/AvDatabaseStorage.h"
 #include "service/scan/ScanEngine.h"
 
+#include <array>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <windows.h>
 
 namespace {
 
 using antivirus::service::scan::AvDatabase;
+using antivirus::service::scan::AvDatabaseLoadError;
+using antivirus::service::scan::AvDatabaseStorage;
 using antivirus::service::scan::ObjectType;
 using antivirus::service::scan::ScanEngine;
 using antivirus::service::scan::ScanResult;
@@ -28,6 +36,62 @@ void expect(bool condition, const char* name, int& failures)
         std::cerr << "FAILED: " << name << '\n';
         ++failures;
     }
+}
+
+std::filesystem::path uniqueTempRoot()
+{
+    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() / (L"AntivirusGuiTests-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(ticks));
+}
+
+std::wstring readProgramData()
+{
+    std::array<wchar_t, 32768> buffer{};
+    const DWORD length = GetEnvironmentVariableW(L"ProgramData", buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        return {};
+    }
+
+    return std::wstring(buffer.data(), length);
+}
+
+void restoreProgramData(const std::wstring& oldValue)
+{
+    if (oldValue.empty()) {
+        SetEnvironmentVariableW(L"ProgramData", nullptr);
+        return;
+    }
+
+    SetEnvironmentVariableW(L"ProgramData", oldValue.c_str());
+}
+
+bool corruptManifestSignature(const std::filesystem::path& databasePath)
+{
+    std::fstream file(databasePath, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    file.seekg(8, std::ios::beg);
+    std::uint32_t releaseDateLength = 0;
+    file.read(reinterpret_cast<char*>(&releaseDateLength), sizeof(releaseDateLength));
+    if (!file.good()) {
+        return false;
+    }
+
+    const std::streamoff manifestOffset = 4 + 4 + 4 + static_cast<std::streamoff>(releaseDateLength * sizeof(std::uint16_t)) + 4;
+    file.seekg(manifestOffset, std::ios::beg);
+
+    char byte = '\0';
+    file.read(&byte, sizeof(byte));
+    if (!file.good()) {
+        return false;
+    }
+
+    byte = static_cast<char>(byte ^ 0xff);
+    file.seekp(manifestOffset, std::ios::beg);
+    file.write(&byte, sizeof(byte));
+    return file.good();
 }
 
 } // namespace
@@ -57,6 +121,28 @@ int main()
     const ScanResult wrongTypeResult = scanBytes("MZAVGUI-PE-TEST", ObjectType::PowerShellScript);
     expect(wrongTypeResult.scanned, "Wrong object type sample is scanned", failures);
     expect(!wrongTypeResult.malicious, "Wrong object type does not match", failures);
+
+    const std::wstring oldProgramData = readProgramData();
+    const std::filesystem::path tempRoot = uniqueTempRoot();
+    std::filesystem::create_directories(tempRoot);
+    SetEnvironmentVariableW(L"ProgramData", tempRoot.wstring().c_str());
+
+    AvDatabaseStorage serverStorage(tempRoot / L"AntivirusGuiMockServer");
+    expect(serverStorage.writeDefaultDatabase(), "Mock update server database is written", failures);
+
+    AvDatabaseStorage primaryStorage;
+    expect(primaryStorage.writeDefaultDatabase(), "Primary database is written", failures);
+    expect(corruptManifestSignature(primaryStorage.databasePath()), "Primary manifest signature is corrupted", failures);
+
+    const auto repaired = primaryStorage.loadOrRecover();
+    expect(repaired.loaded, "Corrupted primary database is recovered", failures);
+    expect(repaired.repairedFromMockUpdateServer, "Recovery uses mock update server", failures);
+    expect(repaired.primaryError == AvDatabaseLoadError::InvalidManifestSignature, "Manifest corruption is tracked separately", failures);
+    expect(!repaired.records.empty(), "Repaired database has records", failures);
+
+    restoreProgramData(oldProgramData);
+    std::error_code cleanupError;
+    std::filesystem::remove_all(tempRoot, cleanupError);
 
     return failures == 0 ? 0 : 1;
 }

@@ -1,9 +1,12 @@
 #include "service/scan/AvDatabaseStorage.h"
 
+#include "service/scan/AvUpdateClient.h"
+
 #include <array>
 #include <fstream>
 #include <limits>
 #include <system_error>
+#include <utility>
 #include <windows.h>
 
 namespace antivirus::service::scan {
@@ -159,6 +162,11 @@ AvDatabaseStorage::AvDatabaseStorage()
 {
 }
 
+AvDatabaseStorage::AvDatabaseStorage(std::filesystem::path baseDirectory)
+    : baseDirectory_(std::move(baseDirectory))
+{
+}
+
 std::filesystem::path AvDatabaseStorage::databasePath() const
 {
     return baseDirectory_ / L"avdb.bin";
@@ -180,13 +188,44 @@ AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
     (void)std::filesystem::create_directories(baseDirectory_, errorCode);
 
     AvDatabaseLoadResult primary = loadSingleFile(databasePath());
-    if (primary.loaded) {
+    if (primary.loaded && primary.skippedRecordCount == 0) {
         return primary;
     }
+
+    std::vector<std::wstring> events;
+    events.push_back(L"Primary database invalid");
+
+    if (primary.error == AvDatabaseLoadError::InvalidManifestSignature) {
+        events.push_back(L"Manifest signature is invalid; forcing update from mock update server");
+    }
+
+    events.push_back(L"Trying to repair database from mock update server");
+
+    const AvUpdateClient updateClient;
+    AvDatabaseLoadResult server = updateClient.fetchDatabase();
+    if (server.loaded) {
+        server.repairedFromMockUpdateServer = true;
+        server.primaryError = primary.error;
+        server.events = events;
+        server.events.push_back(L"Database repaired from mock update server");
+        server.message = L"Database repaired from mock update server";
+
+        if (!writeDatabase(server.releaseDate, server.records)) {
+            server.events.push_back(L"Failed to write repaired database to primary path");
+        }
+
+        return server;
+    }
+
+    events.push_back(server.mockUpdateServerUnavailable ? L"Mock update server unavailable"
+                                                        : L"Mock update server database is invalid");
 
     AvDatabaseLoadResult backup = loadSingleFile(backupPath());
     if (backup.loaded) {
         backup.recoveredFromBackup = true;
+        backup.primaryError = primary.error;
+        backup.events = events;
+        backup.events.push_back(L"Recovered from backup");
         backup.message = L"Primary antivirus database is invalid; recovered from backup";
 
         (void)std::filesystem::copy_file(backupPath(),
@@ -200,14 +239,22 @@ AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
 
     AvDatabaseLoadResult fallback = loadSingleFile(databasePath());
     fallback.usedDefaultDatabase = true;
+    fallback.primaryError = primary.error;
+    fallback.events = events;
 
     if (fallback.loaded) {
+        fallback.events.push_back(L"Loaded default database");
         fallback.message = L"Primary and backup antivirus databases are invalid; loaded default database";
     } else {
         fallback.message = L"Failed to load primary, backup, and default antivirus databases";
     }
 
     return fallback;
+}
+
+AvDatabaseLoadResult AvDatabaseStorage::loadDatabaseFile(const std::filesystem::path& path) const
+{
+    return loadSingleFile(path);
 }
 
 bool AvDatabaseStorage::writeDefaultDatabase() const
@@ -268,6 +315,7 @@ AvDatabaseLoadResult AvDatabaseStorage::loadSingleFile(const std::filesystem::pa
 
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
+        result.error = AvDatabaseLoadError::FileNotFound;
         result.message = L"Antivirus database file is not available";
         return result;
     }
@@ -275,35 +323,41 @@ AvDatabaseLoadResult AvDatabaseStorage::loadSingleFile(const std::filesystem::pa
     std::array<char, 4> magic{};
     input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
     if (input.gcount() != static_cast<std::streamsize>(magic.size()) || magic != kMagic) {
+        result.error = AvDatabaseLoadError::InvalidMagic;
         result.message = L"Invalid antivirus database magic";
         return result;
     }
 
     std::uint32_t version = 0;
     if (!readUint32(input, version) || version != kVersion) {
+        result.error = AvDatabaseLoadError::InvalidVersion;
         result.message = L"Unsupported antivirus database version";
         return result;
     }
 
     if (!readWideString(input, kMaxReleaseDateChars, result.releaseDate)) {
+        result.error = AvDatabaseLoadError::InvalidReleaseDate;
         result.message = L"Invalid antivirus database release date";
         return result;
     }
 
     std::uint32_t declaredRecordCount = 0;
     if (!readUint32(input, declaredRecordCount) || declaredRecordCount > kMaxRecordCount) {
+        result.error = AvDatabaseLoadError::InvalidRecordCount;
         result.message = L"Invalid antivirus database record count";
         return result;
     }
 
     std::array<std::uint8_t, 32> storedManifestSignature{};
     if (!readBytes(input, storedManifestSignature)) {
+        result.error = AvDatabaseLoadError::InvalidManifestSignature;
         result.message = L"Invalid antivirus database manifest signature";
         return result;
     }
 
     const std::array<std::uint8_t, 32> expectedManifestSignature = signManifest(result.releaseDate, declaredRecordCount);
     if (storedManifestSignature != expectedManifestSignature) {
+        result.error = AvDatabaseLoadError::InvalidManifestSignature;
         result.message = L"Antivirus database manifest signature verification failed";
         return result;
     }
@@ -311,12 +365,15 @@ AvDatabaseLoadResult AvDatabaseStorage::loadSingleFile(const std::filesystem::pa
     for (std::uint32_t index = 0; index < declaredRecordCount; ++index) {
         AvRecord record;
         if (!readRecord(input, record)) {
+            result.error = AvDatabaseLoadError::RecordReadFailed;
             result.message = L"Antivirus database record read failed";
             return result;
         }
 
         const std::array<std::uint8_t, 32> expectedRecordSignature = signAvRecord(record);
         if (record.avRecordSignature != expectedRecordSignature) {
+            result.error = AvDatabaseLoadError::InvalidRecordSignature;
+            ++result.skippedRecordCount;
             continue;
         }
 
@@ -324,7 +381,12 @@ AvDatabaseLoadResult AvDatabaseStorage::loadSingleFile(const std::filesystem::pa
     }
 
     result.loaded = true;
-    result.message = L"Antivirus database loaded from disk";
+    if (result.skippedRecordCount > 0) {
+        result.message = L"Antivirus database loaded from disk with skipped corrupted records";
+    } else {
+        result.error = AvDatabaseLoadError::None;
+        result.message = L"Antivirus database loaded from disk";
+    }
     return result;
 }
 

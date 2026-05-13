@@ -192,10 +192,12 @@ if(ANTIVIRUS_BUILD_SERVICE)
         src/service/SessionManager.h
         src/service/scan/AvDatabase.cpp
         src/service/scan/AvDatabase.h
-        src/service/scan/AhoCorasickScanner.cpp
-        src/service/scan/AhoCorasickScanner.h
         src/service/scan/AvDatabaseStorage.cpp
         src/service/scan/AvDatabaseStorage.h
+        src/service/scan/AvUpdateClient.cpp
+        src/service/scan/AvUpdateClient.h
+        src/service/scan/AhoCorasickScanner.cpp
+        src/service/scan/AhoCorasickScanner.h
         src/service/scan/AvUpdateScheduler.cpp
         src/service/scan/AvUpdateScheduler.h
         src/service/scan/DirectoryMonitor.cpp
@@ -236,6 +238,10 @@ if(ANTIVIRUS_BUILD_TESTS)
         tests/ScanEngineTests.cpp
         src/service/scan/AvDatabase.cpp
         src/service/scan/AvDatabase.h
+        src/service/scan/AvDatabaseStorage.cpp
+        src/service/scan/AvDatabaseStorage.h
+        src/service/scan/AvUpdateClient.cpp
+        src/service/scan/AvUpdateClient.h
         src/service/scan/AhoCorasickScanner.cpp
         src/service/scan/AhoCorasickScanner.h
         src/service/scan/ScanEngine.cpp

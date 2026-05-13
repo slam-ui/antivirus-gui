@@ -488,6 +488,10 @@ private:
         const scan::AvDatabaseLoadResult loadResult = databaseStorage_.loadOrRecover();
         applyDatabaseLoadResult(loadResult);
 
+        for (const std::wstring& event : loadResult.events) {
+            antivirus::common::log_info(event);
+        }
+
         if (loadResult.loaded) {
             antivirus::common::log_info(L"Antivirus database loaded from disk");
             antivirus::common::log_info(loadResult.message);
@@ -512,6 +516,10 @@ private:
     void startDatabaseUpdateScheduler()
     {
         updateScheduler_.start([this](const scan::AvUpdateResult& result) {
+            for (const std::wstring& event : result.loadResult.events) {
+                antivirus::common::log_info(event);
+            }
+
             if (result.loadResult.loaded) {
                 applyDatabaseLoadResult(result.loadResult);
                 antivirus::common::log_info(result.message);
