@@ -8,6 +8,7 @@ project(
 )
 
 option(ANTIVIRUS_BUILD_GUI "Build the Qt Widgets GUI application" ON)
+option(ANTIVIRUS_BUILD_WINUI "Build the WinUI GUI application" ON)
 option(ANTIVIRUS_BUILD_SERVICE "Build the Windows service executable" ON)
 option(ANTIVIRUS_BUILD_TESTS "Build antivirus test executables" ON)
 
@@ -170,6 +171,73 @@ if(ANTIVIRUS_BUILD_GUI)
     endif()
 
     install(TARGETS AntivirusGui RUNTIME DESTINATION bin)
+endif()
+
+if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
+    set(ANTIVIRUS_WINAPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.winapp")
+    set(ANTIVIRUS_WINAPP_INCLUDE_DIR "${ANTIVIRUS_WINAPP_DIR}/include")
+    set(ANTIVIRUS_WINAPP_LIB_DIR "${ANTIVIRUS_WINAPP_DIR}/lib/x64")
+    set(ANTIVIRUS_WINAPP_BIN_DIR "${ANTIVIRUS_WINAPP_DIR}/bin/x64")
+
+    if(NOT EXISTS "${ANTIVIRUS_WINAPP_INCLUDE_DIR}/winrt/Microsoft.UI.Xaml.h")
+        message(FATAL_ERROR "WinUI headers are missing. Run: npx --yes @microsoft/winappcli restore")
+    endif()
+
+    add_executable(AntivirusWinUi WIN32
+        src/winui/main.cpp
+    )
+
+    set_target_properties(AntivirusWinUi PROPERTIES
+        AUTOMOC OFF
+        AUTORCC OFF
+        AUTOUIC OFF
+    )
+
+    target_include_directories(AntivirusWinUi
+        PRIVATE
+            "${ANTIVIRUS_WINAPP_INCLUDE_DIR}"
+    )
+
+    target_link_directories(AntivirusWinUi
+        PRIVATE
+            "${ANTIVIRUS_WINAPP_LIB_DIR}"
+    )
+
+    target_compile_definitions(AntivirusWinUi
+        PRIVATE
+            ANTIVIRUS_APP_VERSION="${PROJECT_VERSION}"
+            UNICODE
+            _UNICODE
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+    )
+
+    target_link_libraries(AntivirusWinUi
+        PRIVATE
+            Microsoft.WindowsAppRuntime.Bootstrap
+            Microsoft.WindowsAppRuntime
+            Microsoft.UI.Dispatching
+            DWriteCore
+            WindowsApp
+            RuntimeObject
+            Ole32
+            Shell32
+    )
+
+    if(MSVC)
+        target_compile_options(AntivirusWinUi PRIVATE /W4 /permissive- /utf-8 /bigobj)
+    else()
+        target_compile_options(AntivirusWinUi PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_custom_command(TARGET AntivirusWinUi POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${ANTIVIRUS_WINAPP_BIN_DIR}/Microsoft.WindowsAppRuntime.Bootstrap.dll"
+            "$<TARGET_FILE_DIR:AntivirusWinUi>"
+        VERBATIM
+    )
+
+    install(TARGETS AntivirusWinUi RUNTIME DESTINATION bin)
 endif()
 
 if(ANTIVIRUS_BUILD_SERVICE)

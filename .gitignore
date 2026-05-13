@@ -11,3 +11,8 @@ out/
 *.exe
 *.dll
 *.msi
+
+# Windows SDK packages and generated files
+.winapp
+Assets/
+Package.appxmanifest
