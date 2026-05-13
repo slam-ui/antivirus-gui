@@ -5,30 +5,25 @@
 Run after each task:
 
 ```powershell
+npx --yes @microsoft/winappcli restore
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
 ## Task 2.1 Manual Checks
 
-1. Start `AntivirusGui.exe`.
-2. Verify a tray icon appears.
-3. Close the main window and verify the process continues running.
-4. Left-click the tray icon and verify the main window appears.
-5. Right-click the tray icon and verify the context menu appears.
-6. Use `Открыть` to show the window.
-7. Use `Выход` to terminate the application.
-8. Start `AntivirusGui.exe --hidden` and verify the window is hidden while the tray icon exists.
-9. Start a second instance and verify it exits without creating another tray icon.
-10. Restart Explorer and verify the tray icon is restored.
+1. Start `AntivirusWinUi.exe`.
+2. Verify the WinUI window opens with service, account, license, database, scan, monitoring, and result sections.
+3. Start the service and verify status polling changes from RPC unavailable to `Служба работает`.
+4. Verify blocked scan/monitoring buttons are disabled until login and license activation.
 
 ## Task 2.2 Manual Checks
 
 1. Install the Windows service as administrator.
 2. Start the service.
-3. Verify the service launches GUI children in user sessions with hidden windows.
+3. Verify the service launches `AntivirusWinUi.exe` in user sessions.
 4. Verify new user logons trigger GUI launch.
-5. Use GUI menu exit and tray exit to request service stop through local RPC.
+5. Use the WinUI `Остановить службу` button to request service stop through local RPC after Secure Desktop confirmation.
 6. Verify service stop closes owned GUI child processes.
 
 ## Task 2.3 Manual Checks

@@ -7,7 +7,7 @@ project(
     LANGUAGES C CXX
 )
 
-option(ANTIVIRUS_BUILD_GUI "Build the Qt Widgets GUI application" ON)
+option(ANTIVIRUS_BUILD_GUI "Build the legacy Qt Widgets GUI application" OFF)
 option(ANTIVIRUS_BUILD_WINUI "Build the WinUI GUI application" ON)
 option(ANTIVIRUS_BUILD_SERVICE "Build the Windows service executable" ON)
 option(ANTIVIRUS_BUILD_TESTS "Build antivirus test executables" ON)
@@ -248,6 +248,10 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
     )
 
     install(TARGETS AntivirusWinUi RUNTIME DESTINATION bin)
+    install(FILES
+        "${ANTIVIRUS_WINAPP_BIN_DIR}/Microsoft.WindowsAppRuntime.Bootstrap.dll"
+        DESTINATION bin
+    )
 endif()
 
 if(ANTIVIRUS_BUILD_SERVICE)

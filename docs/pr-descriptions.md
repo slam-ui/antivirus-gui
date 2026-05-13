@@ -62,3 +62,26 @@ Finalized the extra 2.1-2.5 branch with stabilization, Aho-Corasick demo scannin
 - `cmake -S . -B build-local-extra-final -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/Users/13372/QtCodex/6.7.3/msvc2019_64"`
 - `cmake --build build-local-extra-final --config Release`
 - `ctest --test-dir build-local-extra-final -C Release --output-on-failure`
+
+## feature/winui-gui
+
+### Summary
+
+Migrated the primary GUI from Qt Widgets to WinUI while keeping the Windows Service and RPC contract intact.
+
+### Details
+
+- Restored Windows App SDK packages through `winapp.yaml`.
+- Added `AntivirusWinUi` as the primary GUI target.
+- Added a non-Qt RPC client for WinUI over the existing generated MIDL client stubs.
+- Ported status polling, login, logout, license activation, scan file/folder/fixed drives, directory monitoring, and secure service stop controls.
+- Switched the service session launcher to `AntivirusWinUi.exe`.
+- Disabled the legacy Qt target by default; it remains available with `-DANTIVIRUS_BUILD_GUI=ON`.
+- Updated demo scripts, CI, README, architecture notes, and defense notes for the WinUI build.
+
+### Verification
+
+- `npx --yes @microsoft/winappcli restore`
+- `cmake -S . -B build-local-winui-clean -DCMAKE_BUILD_TYPE=Release`
+- `cmake --build build-local-winui-clean --config Release`
+- `ctest --test-dir build-local-winui-clean -C Release --output-on-failure`

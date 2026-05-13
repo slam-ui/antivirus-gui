@@ -8,7 +8,7 @@ Recommended order:
 2. `.\scripts\demo\prepare-license.ps1`
 3. `.\scripts\demo\install-service.ps1`
 4. `.\scripts\demo\create-test-threats.ps1`
-5. Open `build-local-extra-final\Release\AntivirusGui.exe`, login as `demo` / `demo`, activate with `DEMO-1234`, and scan `C:\ProgramData\AntivirusGuiScanTest`.
+5. Open `build-local-extra-final\Release\AntivirusWinUi.exe`, login as `demo` / `demo`, activate with `DEMO-1234`, and scan `C:\ProgramData\AntivirusGuiScanTest`.
 6. Use GUI monitoring controls on `C:\ProgramData\AntivirusGuiScanTest`, then create or edit a demo file and run `.\scripts\demo\show-logs.ps1`.
 7. `.\scripts\demo\prepare-backup-recovery.ps1`
 8. Rebuild or restart service if needed, then run `.\scripts\demo\prepare-mock-update-recovery.ps1`

@@ -6,10 +6,10 @@
 
 ## 2. Общая архитектура
 
-- GUI: Qt Widgets target `AntivirusGui`, файлы `src/gui/*`.
+- GUI: основной WinUI target `AntivirusWinUi`, файлы `src/winui/*`. Старый Qt Widgets target `AntivirusGui` оставлен как legacy и отключён по умолчанию.
 - Windows Service: target `AntivirusService`, файлы `src/service/*`.
 - Windows RPC: контракт `rpc/AntivirusRpc.idl`, generated client/server stubs создаются через MIDL.
-- CMake: основной файл сборки `CMakeLists.txt`, Release build проверяется через `build-local-extra-final`.
+- CMake: основной файл сборки `CMakeLists.txt`, Release build проверяется через `build-local-winui-clean` или demo build `build-local-extra-final`.
 - Windows API: service control manager, RPC over `ncalrpc`, session launch, process hardening, `ProgramData`, fixed drive enumeration.
 
 ## 3. Авторизация и лицензия
@@ -95,7 +95,7 @@ Mock update server — локальная папка `C:\ProgramData\AntivirusGu
 
 ## 13. Secure Desktop confirmation
 
-Остановка службы из GUI проходит через `SecureStopConfirmation`. Это учебная демонстрация подтверждения опасного действия перед RPC-вызовом `AvRequestServiceStop`.
+Остановка службы из GUI проходит через общий `common/secure_stop_confirmation.cpp`. Это учебная демонстрация подтверждения опасного действия перед RPC-вызовом `AvRequestServiceStop`. WinUI использует эту же Secure Desktop логику, чтобы не ломать старый Qt GUI.
 
 ## 14. Process hardening
 
@@ -109,7 +109,7 @@ Mock update server — локальная папка `C:\ProgramData\AntivirusGu
 2. `.\scripts\demo\prepare-license.ps1`
 3. `.\scripts\demo\install-service.ps1`
 4. `.\scripts\demo\create-test-threats.ps1`
-5. Запустить `build-local-extra-final\Release\AntivirusGui.exe`.
+5. Запустить `build-local-extra-final\Release\AntivirusWinUi.exe`.
 6. Войти: `demo` / `demo`.
 7. Активировать: `DEMO-1234`.
 8. Сканировать `C:\ProgramData\AntivirusGuiScanTest`.

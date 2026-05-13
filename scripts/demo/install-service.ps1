@@ -10,6 +10,7 @@ if (-not (Test-Path $ServiceExe)) {
     throw "Service executable not found. Run scripts/demo/build-release.ps1 first."
 }
 
+Stop-Process -Name 'AntivirusWinUi' -Force -ErrorAction SilentlyContinue
 Stop-Process -Name 'AntivirusGui' -Force -ErrorAction SilentlyContinue
 
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue

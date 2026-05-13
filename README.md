@@ -4,13 +4,13 @@ Educational Windows C++20 project for antivirus GUI coursework. The project is i
 
 ## Covered Assignments
 
-- Task 2.1: Qt Widgets GUI, tray lifecycle, hidden mode, single-instance behavior.
+- Task 2.1: GUI lifecycle foundation; the primary GUI is now WinUI.
 - Task 2.2: Windows service, session launch, and local RPC interaction.
 - Task 2.3: account login, activation, and license-gated features.
 - Extra points: CMake build, secure stop confirmation, and documented DACL hardening.
 - Task 2.6: Windows installer packaging.
 
-This initial scaffold provides the C++20/CMake structure, minimal GUI target, service target placeholder, documentation, and Windows CI.
+The project provides a C++20/CMake Windows Service, local RPC, WinUI GUI, database scanning, demo update/recovery scripts, and coursework documentation.
 
 ## Build
 
@@ -18,22 +18,26 @@ Prerequisites:
 
 - Windows with Visual Studio 2022 Build Tools or Visual Studio 2022.
 - CMake 3.24 or newer.
-- Qt 6 Widgets development package available to CMake.
+- Node.js/npm for `npx @microsoft/winappcli restore`.
+- Windows App SDK packages restored by `winappcli` from `winapp.yaml`.
 
 ```powershell
+npx --yes @microsoft/winappcli restore
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
+
+The legacy Qt Widgets target is disabled by default. Build it only when needed with `-DANTIVIRUS_BUILD_GUI=ON` and a Qt 6 `CMAKE_PREFIX_PATH`.
 
 ## Run GUI
 
 After building:
 
 ```powershell
-.\build\Release\AntivirusGui.exe
+.\build\Release\AntivirusWinUi.exe
 ```
 
-At the scaffold stage the GUI shows a minimal Qt Widgets window only. Tray and lifecycle behavior are implemented in Task 2.1.
+The WinUI GUI talks to the service through Windows RPC. Run the service first for real statuses, login, activation, scanning, monitoring, and service stop.
 
 ## Run Service
 
@@ -43,8 +47,8 @@ After building:
 .\build\Release\AntivirusService.exe --console
 ```
 
-At the scaffold stage the service executable is a console placeholder. Native Windows service behavior is implemented in Task 2.2.
+For the real Windows Service install/start flow, run PowerShell as Administrator and use `scripts/demo/install-service.ps1`.
 
 ## CI Artifacts
 
-The Windows workflow configures CMake, builds the Release targets, and uploads the built executables as artifacts.
+The Windows workflow restores WinApp SDK packages, configures CMake, builds the Release targets, and uploads the WinUI GUI, service, tests, and bootstrap DLL as artifacts.

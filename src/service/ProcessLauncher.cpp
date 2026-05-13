@@ -218,7 +218,7 @@ bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launc
         return false;
     }
 
-    const auto guiPath = common::executable_directory() / L"AntivirusGui.exe";
+    const auto guiPath = common::executable_directory() / L"AntivirusWinUi.exe";
     const auto guiDir = guiPath.parent_path();
 
     common::log_info(L"GUI executable path: " + guiPath.wstring());
@@ -239,7 +239,7 @@ bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launc
         return false;
     }
 
-    std::wstring commandLine = quotePath(guiPath) + L" --hidden --service-child";
+    std::wstring commandLine = quotePath(guiPath) + L" --service-child";
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -271,7 +271,7 @@ bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launc
 
     Handle threadHandle(processInfo.hThread);
 
-    common::hardenProcessHandleForDemo(processInfo.hProcess, L"AntivirusGui.exe child", true);
+    common::hardenProcessHandleForDemo(processInfo.hProcess, L"AntivirusWinUi.exe child", true);
 
     launched.processHandle = processInfo.hProcess;
     launched.processId = processInfo.dwProcessId;
