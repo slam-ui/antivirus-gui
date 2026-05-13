@@ -9,6 +9,7 @@ project(
 
 option(ANTIVIRUS_BUILD_GUI "Build the Qt Widgets GUI application" ON)
 option(ANTIVIRUS_BUILD_SERVICE "Build the Windows service executable" ON)
+option(ANTIVIRUS_BUILD_TESTS "Build antivirus test executables" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -191,6 +192,8 @@ if(ANTIVIRUS_BUILD_SERVICE)
         src/service/SessionManager.h
         src/service/scan/AvDatabase.cpp
         src/service/scan/AvDatabase.h
+        src/service/scan/AhoCorasickScanner.cpp
+        src/service/scan/AhoCorasickScanner.h
         src/service/scan/AvDatabaseStorage.cpp
         src/service/scan/AvDatabaseStorage.h
         src/service/scan/AvUpdateScheduler.cpp
@@ -222,6 +225,47 @@ if(ANTIVIRUS_BUILD_SERVICE)
     endif()
 
     install(TARGETS AntivirusService RUNTIME DESTINATION bin)
+endif()
+
+if(ANTIVIRUS_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(AntivirusScanTests
+        tests/ScanEngineTests.cpp
+        src/service/scan/AvDatabase.cpp
+        src/service/scan/AvDatabase.h
+        src/service/scan/AhoCorasickScanner.cpp
+        src/service/scan/AhoCorasickScanner.h
+        src/service/scan/ScanEngine.cpp
+        src/service/scan/ScanEngine.h
+    )
+
+    set_target_properties(AntivirusScanTests PROPERTIES
+        AUTOMOC OFF
+        AUTORCC OFF
+        AUTOUIC OFF
+    )
+
+    target_include_directories(AntivirusScanTests
+        PRIVATE
+            src
+    )
+
+    target_compile_definitions(AntivirusScanTests
+        PRIVATE
+            UNICODE
+            _UNICODE
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+    )
+
+    if(MSVC)
+        target_compile_options(AntivirusScanTests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AntivirusScanTests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME AntivirusScanTests COMMAND AntivirusScanTests)
 endif()
 
 install(FILES README.md DESTINATION .)

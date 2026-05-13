@@ -1,6 +1,9 @@
 #include "service/scan/ScanEngine.h"
 
+#include "service/scan/AhoCorasickScanner.h"
+
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace antivirus::service::scan {
@@ -48,6 +51,17 @@ ScanResult ScanEngine::scan(std::istream& input, ObjectType objectType, const Av
         return result;
     }
 
+    AhoCorasickScanner ahoScanner;
+    ahoScanner.buildFromDatabase(database);
+    if (!ahoScanner.empty()) {
+        std::optional<ScanResult> ahoResult = ahoScanner.scan(input, objectType);
+        if (ahoResult.has_value()) {
+            return ahoResult.value();
+        }
+    }
+
+    // Keep the std::map prefix lookup as a fallback and as the red-black-tree
+    // requirement for task 2.4.
     for (std::streamoff position = 0; position <= fileSize - 8; ++position) {
         std::array<std::uint8_t, 8> prefixBytes{};
         if (!readExactly(input, position, prefixBytes.data(), prefixBytes.size())) {

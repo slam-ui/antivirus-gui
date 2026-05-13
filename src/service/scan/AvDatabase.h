@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,7 @@ std::array<std::uint8_t, 32> demoHash32(const std::vector<std::uint8_t>& bytes);
 std::array<std::uint8_t, 32> signAvRecord(const AvRecord& record);
 std::array<std::uint8_t, 32> signManifest(const std::wstring& releaseDate, std::size_t declaredRecordCount);
 std::vector<AvRecord> makeDemoRecords();
+std::optional<std::vector<std::uint8_t>> demoRawSignatureForRecord(const AvRecord& record);
 std::wstring objectTypeToString(ObjectType type);
 
 } // namespace antivirus::service::scan

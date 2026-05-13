@@ -71,6 +71,17 @@ AvRecord makeRecord(const char* signatureText,
     return record;
 }
 
+bool sameRecordSignatureModel(const AvRecord& left, const AvRecord& right)
+{
+    return left.objectSignaturePrefix == right.objectSignaturePrefix
+        && left.objectSignatureLength == right.objectSignatureLength
+        && left.objectSignature == right.objectSignature
+        && left.offsetBegin == right.offsetBegin
+        && left.offsetEnd == right.offsetEnd
+        && left.objectType == right.objectType
+        && left.threatName == right.threatName;
+}
+
 } // namespace
 
 std::uint64_t prefixFromBytes(const std::array<std::uint8_t, 8>& bytes)
@@ -151,6 +162,22 @@ std::vector<AvRecord> makeDemoRecords()
     ));
 
     return records;
+}
+
+std::optional<std::vector<std::uint8_t>> demoRawSignatureForRecord(const AvRecord& record)
+{
+    const std::vector<std::pair<const char*, AvRecord>> demoSignatures = {
+        {"MZAVGUI-PE-TEST", makeRecord("MZAVGUI-PE-TEST", 0, 512, ObjectType::PeFile, L"Demo.Test.PE.Signature")},
+        {"Invoke-AvGuiTest", makeRecord("Invoke-AvGuiTest", 0, 4096, ObjectType::PowerShellScript, L"Demo.Test.PowerShell.Signature")},
+    };
+
+    for (const auto& [rawSignature, demoRecord] : demoSignatures) {
+        if (sameRecordSignatureModel(record, demoRecord)) {
+            return asciiBytes(rawSignature);
+        }
+    }
+
+    return std::nullopt;
 }
 
 std::wstring objectTypeToString(ObjectType type)
