@@ -53,6 +53,18 @@ Section "Application" SEC_APP
     SetShellVarContext all
     SetRegView 64
 
+    SetOutPath "$TEMP\AntivirusGuiSetup"
+    File /oname=AntivirusCtl.exe "${BUILD_DIR}\Release\AntivirusCtl.exe"
+
+    DetailPrint "Requesting existing service stop through RPC..."
+    ExecWait '"$TEMP\AntivirusGuiSetup\AntivirusCtl.exe" --request-stop' $0
+    Sleep 3000
+
+    DetailPrint "Stopping old GUI processes if present..."
+    nsExec::ExecToLog 'taskkill.exe /IM AntivirusWinUi.exe /F /T'
+    nsExec::ExecToLog 'taskkill.exe /IM AntivirusGui.exe /F /T'
+    Sleep 1000
+
     DetailPrint "Stopping existing service if present..."
     ExecWait 'sc.exe stop ${SERVICE_NAME}' $0
     Sleep 2000
@@ -64,6 +76,7 @@ Section "Application" SEC_APP
     SetOutPath "$INSTDIR"
     File "${BUILD_DIR}\Release\AntivirusWinUi.exe"
     File "${BUILD_DIR}\Release\AntivirusService.exe"
+    File "${BUILD_DIR}\Release\AntivirusCtl.exe"
     File "${BUILD_DIR}\Release\Microsoft.WindowsAppRuntime.Bootstrap.dll"
 
     SetOutPath "$INSTDIR\docs"
@@ -121,6 +134,7 @@ Section "Uninstall"
 
     Delete "$INSTDIR\AntivirusWinUi.exe"
     Delete "$INSTDIR\AntivirusService.exe"
+    Delete "$INSTDIR\AntivirusCtl.exe"
     Delete "$INSTDIR\Microsoft.WindowsAppRuntime.Bootstrap.dll"
     Delete "$INSTDIR\Uninstall.exe"
     RMDir /r "$INSTDIR\docs"

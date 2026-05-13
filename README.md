@@ -56,7 +56,7 @@ GitHub Actions builds a real administrator installer artifact:
 - artifact name: `antivirus-gui-installer`
 - file: `AntivirusGuiSetup.exe`
 
-The installer includes the app, service, demo docs/scripts, Microsoft Visual C++ Runtime installer, and Windows App Runtime 2.0 installer.
+The installer includes the app, service, RPC stop helper, demo docs/scripts, Microsoft Visual C++ Runtime installer, and Windows App Runtime 2.0 installer. During upgrades it requests service stop through RPC before replacing files.
 
 Build it locally after a Release build:
 

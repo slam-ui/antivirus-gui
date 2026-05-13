@@ -51,6 +51,7 @@ jobs:
             build/Release/AntivirusWinUi.exe
             build/Release/Microsoft.WindowsAppRuntime.Bootstrap.dll
             build/Release/AntivirusService.exe
+            build/Release/AntivirusCtl.exe
             build/Release/AntivirusScanTests.exe
 
       - name: Upload EXE installer

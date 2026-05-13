@@ -59,6 +59,7 @@ $MakeNsis = Find-MakeNsis
 $requiredBuildFiles = @(
     'AntivirusWinUi.exe',
     'AntivirusService.exe',
+    'AntivirusCtl.exe',
     'Microsoft.WindowsAppRuntime.Bootstrap.dll'
 )
 

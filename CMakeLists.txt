@@ -254,6 +254,41 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
     )
 endif()
 
+if(WIN32)
+    add_executable(AntivirusCtl
+        src/tools/AntivirusCtl.cpp
+        src/winui/RpcClientWin.cpp
+        src/winui/RpcClientWin.h
+    )
+
+    target_include_directories(AntivirusCtl
+        PRIVATE
+            src
+    )
+
+    target_compile_definitions(AntivirusCtl
+        PRIVATE
+            UNICODE
+            _UNICODE
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+    )
+
+    target_link_libraries(AntivirusCtl
+        PRIVATE
+            AntivirusRpcClient
+            Rpcrt4
+    )
+
+    if(MSVC)
+        target_compile_options(AntivirusCtl PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AntivirusCtl PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    install(TARGETS AntivirusCtl RUNTIME DESTINATION bin)
+endif()
+
 if(ANTIVIRUS_BUILD_SERVICE)
     add_executable(AntivirusService
         src/service/ProcessLauncher.cpp

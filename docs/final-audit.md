@@ -41,7 +41,7 @@
 | 33 | Directory monitoring | Готово | `src/service/scan/DirectoryMonitor.*`, `src/winui/main.cpp` | WinUI start/stop monitoring | Service мониторит папку и сканирует изменённые файлы. |
 | 34 | Secure Desktop confirmation | Готово | `src/common/secure_stop_confirmation.cpp` | WinUI `Остановить службу` | Остановка требует Secure Desktop prompt. |
 | 35 | Process hardening | Готово | `src/common/process_hardening.cpp` | Логи service launch | Реализовано учебное DACL hardening без обхода безопасности Windows. |
-| 36 | Installer | Готово | `installer/AntivirusGui.nsi`, `installer/build-installer.ps1`, `.github/workflows/windows.yml` | GitHub artifact `antivirus-gui-installer` или `installer/build-installer.ps1` | Есть настоящий `AntivirusGuiSetup.exe`: ставит зависимости, WinUI GUI, service, docs/scripts и uninstall. |
+| 36 | Installer | Готово | `installer/AntivirusGui.nsi`, `installer/build-installer.ps1`, `src/tools/AntivirusCtl.cpp`, `.github/workflows/windows.yml` | GitHub artifact `antivirus-gui-installer` или `installer/build-installer.ps1` | Есть настоящий `AntivirusGuiSetup.exe`: останавливает старую службу через RPC helper, ставит зависимости, WinUI GUI, service, docs/scripts и uninstall. |
 | 37 | Demo scripts | Готово | `scripts/demo/*` | Запустить порядок из `scripts/demo/README.md` | Есть scripts для build, service, license, threats, recovery, logs. |
 | 38 | Документация защиты | Готово | `docs/defense.md` | Открыть документ | Есть структура, речь, demo order и пояснения. |
 | 39 | PR descriptions | Готово | `docs/pr-descriptions.md` | Открыть документ | Есть summary для основных веток/проходов. |
