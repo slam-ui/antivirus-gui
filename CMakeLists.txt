@@ -101,6 +101,8 @@ add_library(AntivirusCommon STATIC
     src/common/logging.h
     src/common/process_hardening.cpp
     src/common/process_hardening.h
+    src/common/secure_stop_confirmation.cpp
+    src/common/secure_stop_confirmation.h
     src/common/win_error.cpp
     src/common/win_error.h
 )
@@ -185,6 +187,8 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
 
     add_executable(AntivirusWinUi WIN32
         src/winui/main.cpp
+        src/winui/RpcClientWin.cpp
+        src/winui/RpcClientWin.h
     )
 
     set_target_properties(AntivirusWinUi PROPERTIES
@@ -195,6 +199,7 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
 
     target_include_directories(AntivirusWinUi
         PRIVATE
+            src
             "${ANTIVIRUS_WINAPP_INCLUDE_DIR}"
     )
 
@@ -214,13 +219,18 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
 
     target_link_libraries(AntivirusWinUi
         PRIVATE
+            AntivirusCommon
+            AntivirusRpcClient
             Microsoft.WindowsAppRuntime.Bootstrap
             Microsoft.WindowsAppRuntime
             Microsoft.UI.Dispatching
             DWriteCore
             WindowsApp
             RuntimeObject
+            Comdlg32
+            Credui
             Ole32
+            Rpcrt4
             Shell32
     )
 
