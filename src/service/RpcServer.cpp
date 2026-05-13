@@ -93,6 +93,17 @@ void copyScanResult(const RpcScanResult& source, AvScanResult* destination)
     copyString(destination->lastError, source.lastError);
 }
 
+void copyDirectoryMonitorInfo(const DirectoryMonitorInfo& source, AvDirectoryMonitorStatus* destination)
+{
+    if (destination == nullptr) {
+        return;
+    }
+
+    destination->running = source.running ? 1 : 0;
+    copyString(destination->path, source.path);
+    copyString(destination->lastError, source.lastError);
+}
+
 } // namespace
 
 bool RpcServer::start()
@@ -212,4 +223,19 @@ void AvScanDirectory(handle_t, const wchar_t* path, AvScanResult* result)
 void AvScanFixedDrives(handle_t, AvScanResult* result)
 {
     antivirus::service::copyScanResult(antivirus::service::scanFixedDrivesFromRpc(), result);
+}
+
+void AvStartDirectoryMonitor(handle_t, const wchar_t* path, AvDirectoryMonitorStatus* status)
+{
+    antivirus::service::copyDirectoryMonitorInfo(antivirus::service::startDirectoryMonitorFromRpc(path), status);
+}
+
+void AvStopDirectoryMonitor(handle_t, AvDirectoryMonitorStatus* status)
+{
+    antivirus::service::copyDirectoryMonitorInfo(antivirus::service::stopDirectoryMonitorFromRpc(), status);
+}
+
+void AvGetDirectoryMonitorStatus(handle_t, AvDirectoryMonitorStatus* status)
+{
+    antivirus::service::copyDirectoryMonitorInfo(antivirus::service::queryDirectoryMonitorStatusFromRpc(), status);
 }

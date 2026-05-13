@@ -107,6 +107,15 @@ ScanResult convertScanResult(const AvScanResult& result)
     };
 }
 
+DirectoryMonitorStatus convertDirectoryMonitorStatus(const AvDirectoryMonitorStatus& status)
+{
+    return DirectoryMonitorStatus{
+        .running = status.running != 0,
+        .path = QString::fromWCharArray(status.path),
+        .lastError = QString::fromWCharArray(status.lastError),
+    };
+}
+
 } // namespace
 
 bool RpcClient::ping() const
@@ -271,6 +280,42 @@ ScanResult RpcClient::scanFixedDrives() const
 
     AvScanFixedDrives(binding.get(), &result);
     return convertScanResult(result);
+}
+
+DirectoryMonitorStatus RpcClient::startDirectoryMonitor(const QString& path) const
+{
+    RpcBinding binding;
+    AvDirectoryMonitorStatus status{};
+    if (binding.get() == nullptr) {
+        return DirectoryMonitorStatus{.lastError = QStringLiteral("RPC недоступен")};
+    }
+
+    AvStartDirectoryMonitor(binding.get(), reinterpret_cast<const wchar_t*>(path.utf16()), &status);
+    return convertDirectoryMonitorStatus(status);
+}
+
+DirectoryMonitorStatus RpcClient::stopDirectoryMonitor() const
+{
+    RpcBinding binding;
+    AvDirectoryMonitorStatus status{};
+    if (binding.get() == nullptr) {
+        return DirectoryMonitorStatus{.lastError = QStringLiteral("RPC недоступен")};
+    }
+
+    AvStopDirectoryMonitor(binding.get(), &status);
+    return convertDirectoryMonitorStatus(status);
+}
+
+DirectoryMonitorStatus RpcClient::directoryMonitorStatus() const
+{
+    RpcBinding binding;
+    AvDirectoryMonitorStatus status{};
+    if (binding.get() == nullptr) {
+        return DirectoryMonitorStatus{.lastError = QStringLiteral("RPC недоступен")};
+    }
+
+    AvGetDirectoryMonitorStatus(binding.get(), &status);
+    return convertDirectoryMonitorStatus(status);
 }
 
 } // namespace antivirus::gui

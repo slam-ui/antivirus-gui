@@ -9,8 +9,10 @@
 #include "service/SessionManager.h"
 #include "service/scan/AvDatabaseStorage.h"
 #include "service/scan/AvUpdateScheduler.h"
+#include "service/scan/DirectoryMonitor.h"
 #include "service/scan/FileScanner.h"
 
+#include <filesystem>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -140,6 +142,7 @@ public:
         WaitForSingleObject(stopEvent_, INFINITE);
 
         setStatus(SERVICE_STOP_PENDING);
+        directoryMonitor_.stop();
         updateScheduler_.stop();
         sessionManager_.stopAllGuiChildren();
         rpcServer_.stop();
@@ -197,6 +200,7 @@ public:
     {
         const AuthState state = authManager_.logout();
         licenseManager_.clear();
+        directoryMonitor_.stop();
 
         {
             std::lock_guard lock(databaseMutex_);
@@ -414,6 +418,55 @@ public:
         return result;
     }
 
+    DirectoryMonitorInfo startDirectoryMonitor(const wchar_t* path)
+    {
+        DirectoryMonitorInfo info;
+        info.path = pathOrEmpty(path);
+
+        const FeatureState feature = featureState();
+        if (!feature.enabled) {
+            directoryMonitor_.stop();
+            info.lastError = feature.blockedReason.empty() ? L"Feature is blocked" : feature.blockedReason;
+            return info;
+        }
+
+        {
+            std::lock_guard lock(databaseMutex_);
+            if (!database_.loaded()) {
+                info.lastError = L"Antivirus database is not loaded";
+                return info;
+            }
+        }
+
+        const std::filesystem::path monitorPath(info.path);
+        const bool started = directoryMonitor_.start(monitorPath, [this](const std::filesystem::path& changedPath) {
+            scanMonitoredFile(changedPath);
+        });
+
+        if (started) {
+            antivirus::common::log_info(L"Directory monitor started: " + monitorPath.wstring());
+        }
+
+        return monitorInfo();
+    }
+
+    DirectoryMonitorInfo stopDirectoryMonitor()
+    {
+        directoryMonitor_.stop();
+        antivirus::common::log_info(L"Directory monitor stopped");
+        return monitorInfo();
+    }
+
+    DirectoryMonitorInfo monitorInfo() const
+    {
+        const scan::DirectoryMonitorStatus status = directoryMonitor_.status();
+        return DirectoryMonitorInfo{
+            .running = status.running,
+            .path = status.path.wstring(),
+            .lastError = status.lastError,
+        };
+    }
+
 private:
     void setStatus(DWORD state)
     {
@@ -472,6 +525,35 @@ private:
         antivirus::common::log_info(L"Antivirus database update scheduler started");
     }
 
+    void scanMonitoredFile(const std::filesystem::path& path)
+    {
+        const FeatureState feature = featureState();
+        if (!feature.enabled) {
+            antivirus::common::log_warning(L"Directory monitor skipped scan because antivirus features are blocked");
+            return;
+        }
+
+        std::lock_guard lock(databaseMutex_);
+        if (!database_.loaded()) {
+            antivirus::common::log_warning(L"Directory monitor skipped scan because antivirus database is not loaded");
+            return;
+        }
+
+        const scan::FileScanReport report = scanner_.scanFile(path, database_);
+
+        std::wstringstream stream;
+        stream << L"Directory monitor scanned file: " << path.wstring() << L"\n";
+        stream << buildFileScanDetails(report);
+
+        if (report.result.malicious) {
+            antivirus::common::log_warning(stream.str());
+        } else if (!report.result.error.empty()) {
+            antivirus::common::log_warning(stream.str());
+        } else {
+            antivirus::common::log_info(stream.str());
+        }
+    }
+
     bool serviceMode_ = false;
     SERVICE_STATUS_HANDLE statusHandle_ = nullptr;
     SERVICE_STATUS status_{};
@@ -486,6 +568,7 @@ private:
     scan::AvDatabase database_;
     scan::AvDatabaseStorage databaseStorage_;
     scan::AvUpdateScheduler updateScheduler_;
+    scan::DirectoryMonitor directoryMonitor_;
     scan::FileScanner scanner_;
 };
 
@@ -616,6 +699,33 @@ RpcScanResult scanFixedDrivesFromRpc()
     }
 
     return g_runtime->scanFixedDrives();
+}
+
+DirectoryMonitorInfo startDirectoryMonitorFromRpc(const wchar_t* path)
+{
+    if (g_runtime == nullptr) {
+        return DirectoryMonitorInfo{.path = pathOrEmpty(path), .lastError = L"Service runtime unavailable"};
+    }
+
+    return g_runtime->startDirectoryMonitor(path);
+}
+
+DirectoryMonitorInfo stopDirectoryMonitorFromRpc()
+{
+    if (g_runtime == nullptr) {
+        return DirectoryMonitorInfo{.lastError = L"Service runtime unavailable"};
+    }
+
+    return g_runtime->stopDirectoryMonitor();
+}
+
+DirectoryMonitorInfo queryDirectoryMonitorStatusFromRpc()
+{
+    if (g_runtime == nullptr) {
+        return DirectoryMonitorInfo{.lastError = L"Service runtime unavailable"};
+    }
+
+    return g_runtime->monitorInfo();
 }
 int installService()
 {

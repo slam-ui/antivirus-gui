@@ -44,6 +44,12 @@ struct ScanResult {
     QString lastError;
 };
 
+struct DirectoryMonitorStatus {
+    bool running = false;
+    QString path;
+    QString lastError;
+};
+
 class RpcClient final {
 public:
     bool ping() const;
@@ -60,6 +66,9 @@ public:
     ScanResult scanFile(const QString& path) const;
     ScanResult scanDirectory(const QString& path) const;
     ScanResult scanFixedDrives() const;
+    DirectoryMonitorStatus startDirectoryMonitor(const QString& path) const;
+    DirectoryMonitorStatus stopDirectoryMonitor() const;
+    DirectoryMonitorStatus directoryMonitorStatus() const;
 };
 
 } // namespace antivirus::gui

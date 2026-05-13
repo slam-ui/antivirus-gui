@@ -89,6 +89,9 @@ MainWindow::MainWindow(AppLifecycle& lifecycle, RpcClient& rpcClient, QWidget* p
     databaseLabel_ = new QLabel(QStringLiteral("Антивирусные базы: не загружены"), central);
     databaseLabel_->setWordWrap(true);
 
+    directoryMonitorLabel_ = new QLabel(QStringLiteral("Мониторинг: выключен"), central);
+    directoryMonitorLabel_->setWordWrap(true);
+
     auto* note = new QLabel(QStringLiteral("Закрытие окна скрывает интерфейс, приложение продолжает работать в фоне."), central);
     note->setWordWrap(true);
 
@@ -101,6 +104,12 @@ MainWindow::MainWindow(AppLifecycle& lifecycle, RpcClient& rpcClient, QWidget* p
     scanButtonsLayout->addWidget(scanDirectoryButton_);
     scanButtonsLayout->addWidget(scanFixedDrivesButton_);
 
+    auto* monitorButtonsLayout = new QHBoxLayout();
+    startDirectoryMonitorButton_ = new QPushButton(QStringLiteral("Запустить мониторинг папки"), central);
+    stopDirectoryMonitorButton_ = new QPushButton(QStringLiteral("Остановить мониторинг"), central);
+    monitorButtonsLayout->addWidget(startDirectoryMonitorButton_);
+    monitorButtonsLayout->addWidget(stopDirectoryMonitorButton_);
+
     connect(scanFileButton_, &QPushButton::clicked, this, [this]() {
         scanFile();
     });
@@ -109,6 +118,12 @@ MainWindow::MainWindow(AppLifecycle& lifecycle, RpcClient& rpcClient, QWidget* p
     });
     connect(scanFixedDrivesButton_, &QPushButton::clicked, this, [this]() {
         scanFixedDrives();
+    });
+    connect(startDirectoryMonitorButton_, &QPushButton::clicked, this, [this]() {
+        startDirectoryMonitor();
+    });
+    connect(stopDirectoryMonitorButton_, &QPushButton::clicked, this, [this]() {
+        stopDirectoryMonitor();
     });
 
 
@@ -126,8 +141,10 @@ MainWindow::MainWindow(AppLifecycle& lifecycle, RpcClient& rpcClient, QWidget* p
     layout->addWidget(licenseLabel_);
     layout->addWidget(featureLabel_);
     layout->addWidget(databaseLabel_);
+    layout->addWidget(directoryMonitorLabel_);
     layout->addWidget(note);
     layout->addLayout(scanButtonsLayout);
+    layout->addLayout(monitorButtonsLayout);
     layout->addWidget(scanResultEdit_, 1);
     layout->addWidget(exitButton);
 
@@ -181,8 +198,10 @@ void MainWindow::updateAccountState()
     scanFileButton_->setEnabled(feature.functionalityEnabled);
     scanDirectoryButton_->setEnabled(feature.functionalityEnabled);
     scanFixedDrivesButton_->setEnabled(feature.functionalityEnabled);
+    startDirectoryMonitorButton_->setEnabled(feature.functionalityEnabled);
 
     updateDatabaseState();
+    updateDirectoryMonitorState();
 
     if (!auth.authenticated) {
         showLoginFlow();
@@ -206,6 +225,24 @@ void MainWindow::updateDatabaseState()
         databaseLabel_->setText(QStringLiteral("Антивирусные базы: %1").arg(database.lastError));
     } else {
         databaseLabel_->setText(QStringLiteral("Антивирусные базы: не загружены"));
+    }
+}
+
+void MainWindow::updateDirectoryMonitorState()
+{
+    const DirectoryMonitorStatus status = rpcClient_.directoryMonitorStatus();
+
+    if (status.running) {
+        directoryMonitorLabel_->setText(QStringLiteral("Мониторинг: включён, папка: %1").arg(status.path));
+        stopDirectoryMonitorButton_->setEnabled(true);
+        return;
+    }
+
+    stopDirectoryMonitorButton_->setEnabled(false);
+    if (!status.lastError.isEmpty()) {
+        directoryMonitorLabel_->setText(QStringLiteral("Мониторинг: ошибка: %1").arg(status.lastError));
+    } else {
+        directoryMonitorLabel_->setText(QStringLiteral("Мониторинг: выключен"));
     }
 }
 
@@ -263,6 +300,35 @@ void MainWindow::scanFixedDrives()
     const ScanResult result = rpcClient_.scanFixedDrives();
     scanResultEdit_->setPlainText(formatScanResult(result));
     updateDatabaseState();
+}
+
+void MainWindow::startDirectoryMonitor()
+{
+    const QString path = QFileDialog::getExistingDirectory(this, QStringLiteral("Выберите папку для мониторинга"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    const DirectoryMonitorStatus status = rpcClient_.startDirectoryMonitor(path);
+    updateDirectoryMonitorState();
+
+    if (!status.lastError.isEmpty()) {
+        scanResultEdit_->setPlainText(QStringLiteral("Мониторинг не запущен: %1").arg(status.lastError));
+    } else {
+        scanResultEdit_->setPlainText(QStringLiteral("Мониторинг папки запущен:\n%1").arg(status.path));
+    }
+}
+
+void MainWindow::stopDirectoryMonitor()
+{
+    const DirectoryMonitorStatus status = rpcClient_.stopDirectoryMonitor();
+    updateDirectoryMonitorState();
+
+    if (!status.lastError.isEmpty()) {
+        scanResultEdit_->setPlainText(QStringLiteral("Мониторинг остановлен с предупреждением: %1").arg(status.lastError));
+    } else {
+        scanResultEdit_->setPlainText(QStringLiteral("Мониторинг папки остановлен."));
+    }
 }
 
 } // namespace antivirus::gui

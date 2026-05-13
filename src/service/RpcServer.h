@@ -17,6 +17,12 @@ struct DatabaseInfo {
     std::wstring lastError;
 };
 
+struct DirectoryMonitorInfo {
+    bool running = false;
+    std::wstring path;
+    std::wstring lastError;
+};
+
 struct RpcScanResult {
     bool scanned = false;
     bool malicious = false;
@@ -52,5 +58,8 @@ DatabaseInfo queryDatabaseInfoFromRpc();
 RpcScanResult scanFileFromRpc(const wchar_t* path);
 RpcScanResult scanDirectoryFromRpc(const wchar_t* path);
 RpcScanResult scanFixedDrivesFromRpc();
+DirectoryMonitorInfo startDirectoryMonitorFromRpc(const wchar_t* path);
+DirectoryMonitorInfo stopDirectoryMonitorFromRpc();
+DirectoryMonitorInfo queryDirectoryMonitorStatusFromRpc();
 
 } // namespace antivirus::service
