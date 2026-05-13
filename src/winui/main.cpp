@@ -12,25 +12,33 @@
 #include <MddBootstrap.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.XamlTypeInfo.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.h>
 
 #include <atomic>
+#include <cstdio>
+#include <exception>
 #include <functional>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace controls = winrt::Microsoft::UI::Xaml::Controls;
 namespace dispatching = winrt::Microsoft::UI::Dispatching;
+namespace markup = winrt::Microsoft::UI::Xaml::Markup;
 namespace media = winrt::Microsoft::UI::Xaml::Media;
+namespace xamltype = winrt::Microsoft::UI::Xaml::XamlTypeInfo;
 
 namespace {
 
@@ -42,6 +50,28 @@ winrt::Windows::UI::Color color(unsigned char red, unsigned char green, unsigned
 media::SolidColorBrush brush(unsigned char red, unsigned char green, unsigned char blue)
 {
     return media::SolidColorBrush(color(red, green, blue));
+}
+
+std::wstring formatHresult(winrt::hresult code)
+{
+    wchar_t buffer[16]{};
+    swprintf_s(buffer, L"0x%08X", static_cast<unsigned int>(code.value));
+    return buffer;
+}
+
+std::wstring widenAscii(std::string_view text)
+{
+    std::wstring result;
+    result.reserve(text.size());
+    for (const char ch : text) {
+        result.push_back(static_cast<unsigned char>(ch));
+    }
+    return result;
+}
+
+void showStartupError(const std::wstring& message)
+{
+    MessageBoxW(nullptr, message.c_str(), L"Antivirus GUI", MB_OK | MB_ICONERROR);
 }
 
 controls::TextBlock makeTextBlock(const wchar_t* text, double fontSize = 14.0)
@@ -256,7 +286,7 @@ std::optional<std::wstring> pickFolder(const wchar_t* title)
     return std::wstring(path);
 }
 
-struct WinUiApp : winrt::implements<WinUiApp, mux::IApplicationOverrides> {
+struct WinUiApp : mux::ApplicationT<WinUiApp, markup::IXamlMetadataProvider> {
     void OnLaunched(mux::LaunchActivatedEventArgs const&)
     {
         buildUi();
@@ -268,6 +298,21 @@ struct WinUiApp : winrt::implements<WinUiApp, mux::IApplicationOverrides> {
             refreshState();
         });
         pollingTimer_.Start();
+    }
+
+    markup::IXamlType GetXamlType(winrt::Windows::UI::Xaml::Interop::TypeName const& type)
+    {
+        return xamlProvider_.GetXamlType(type);
+    }
+
+    markup::IXamlType GetXamlType(winrt::hstring const& fullName)
+    {
+        return xamlProvider_.GetXamlType(fullName);
+    }
+
+    winrt::com_array<markup::XmlnsDefinition> GetXmlnsDefinitions()
+    {
+        return xamlProvider_.GetXmlnsDefinitions();
     }
 
 private:
@@ -650,18 +695,34 @@ private:
     controls::Button startMonitorButton_{nullptr};
     controls::Button stopMonitorButton_{nullptr};
     controls::Button stopServiceButton_{nullptr};
+
+    xamltype::XamlControlsXamlMetaDataProvider xamlProvider_;
 };
 
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
-    winrt::init_apartment(winrt::apartment_type::single_threaded);
-    const auto bootstrap = Microsoft::Windows::ApplicationModel::DynamicDependency::Bootstrap::Initialize();
+    try {
+        winrt::init_apartment(winrt::apartment_type::single_threaded);
+        const auto bootstrap = Microsoft::Windows::ApplicationModel::DynamicDependency::Bootstrap::Initialize();
 
-    mux::Application::Start([](auto&&) {
-        winrt::make<WinUiApp>();
-    });
+        mux::Application::Start([](auto&&) {
+            static winrt::com_ptr<WinUiApp> app;
+            app = winrt::make_self<WinUiApp>();
+        });
+    } catch (const winrt::hresult_error& error) {
+        showStartupError(
+            L"Не удалось запустить WinUI-интерфейс.\nHRESULT: " + formatHresult(error.code()) + L"\n" +
+            std::wstring(error.message().c_str()));
+        return 1;
+    } catch (const std::exception& error) {
+        showStartupError(L"Не удалось запустить WinUI-интерфейс.\n" + widenAscii(error.what()));
+        return 1;
+    } catch (...) {
+        showStartupError(L"Не удалось запустить WinUI-интерфейс: неизвестная ошибка.");
+        return 1;
+    }
 
     return 0;
 }
