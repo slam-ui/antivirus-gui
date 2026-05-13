@@ -177,7 +177,7 @@ std::filesystem::path AvDatabaseStorage::baseDirectory() const
 AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
 {
     std::error_code errorCode;
-    std::filesystem::create_directories(baseDirectory_, errorCode);
+    (void)std::filesystem::create_directories(baseDirectory_, errorCode);
 
     AvDatabaseLoadResult primary = loadSingleFile(databasePath());
     if (primary.loaded) {
@@ -189,14 +189,14 @@ AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
         backup.recoveredFromBackup = true;
         backup.message = L"Primary antivirus database is invalid; recovered from backup";
 
-        std::filesystem::copy_file(backupPath(),
-                                   databasePath(),
-                                   std::filesystem::copy_options::overwrite_existing,
-                                   errorCode);
+        (void)std::filesystem::copy_file(backupPath(),
+                                         databasePath(),
+                                         std::filesystem::copy_options::overwrite_existing,
+                                         errorCode);
         return backup;
     }
 
-    writeDefaultDatabase();
+    (void)writeDefaultDatabase();
 
     AvDatabaseLoadResult fallback = loadSingleFile(databasePath());
     fallback.usedDefaultDatabase = true;
@@ -218,7 +218,7 @@ bool AvDatabaseStorage::writeDefaultDatabase() const
 bool AvDatabaseStorage::backupCurrentDatabase() const
 {
     std::error_code errorCode;
-    std::filesystem::create_directories(baseDirectory_, errorCode);
+    (void)std::filesystem::create_directories(baseDirectory_, errorCode);
 
     if (!std::filesystem::exists(databasePath(), errorCode)) {
         return false;
@@ -240,7 +240,7 @@ bool AvDatabaseStorage::writeDatabaseFile(const std::filesystem::path& path,
                                           const std::vector<AvRecord>& records) const
 {
     std::error_code errorCode;
-    std::filesystem::create_directories(path.parent_path(), errorCode);
+    (void)std::filesystem::create_directories(path.parent_path(), errorCode);
 
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     if (!output.is_open()) {

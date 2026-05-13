@@ -36,7 +36,8 @@ if(WIN32)
             "${ANTIVIRUS_RPC_CLIENT}"
             "${ANTIVIRUS_RPC_SERVER}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${ANTIVIRUS_RPC_GENERATED_DIR}"
-        COMMAND "${MIDL_EXECUTABLE}" /nologo /env x64 /char signed /out "${ANTIVIRUS_RPC_GENERATED_DIR}" "${ANTIVIRUS_RPC_IDL}"
+        COMMAND "${MIDL_EXECUTABLE}" /nologo /env x64 /char signed /out "${ANTIVIRUS_RPC_GENERATED_DIR}" "rpc/AntivirusRpc.idl"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         DEPENDS "${ANTIVIRUS_RPC_IDL}"
         VERBATIM
     )

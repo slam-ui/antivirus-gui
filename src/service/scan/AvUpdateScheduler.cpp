@@ -57,10 +57,10 @@ AvUpdateResult AvUpdateScheduler::runUpdateNow()
 
         if (result.backupCreated) {
             std::error_code errorCode;
-            std::filesystem::copy_file(storage_.backupPath(),
-                                       storage_.databasePath(),
-                                       std::filesystem::copy_options::overwrite_existing,
-                                       errorCode);
+            (void)std::filesystem::copy_file(storage_.backupPath(),
+                                             storage_.databasePath(),
+                                             std::filesystem::copy_options::overwrite_existing,
+                                             errorCode);
             result.rolledBack = !errorCode;
         }
 
