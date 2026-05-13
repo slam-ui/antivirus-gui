@@ -36,7 +36,7 @@ Packaging
 - `src/gui`: legacy Qt Widgets GUI executable, disabled by default.
 - `src/service`: Windows service executable.
 - `rpc`: RPC IDL and generated MIDL stubs.
-- `installer`: installer packaging placeholder.
+- `installer`: NSIS EXE installer script and build script for the GitHub Actions installer artifact.
 - `docs`: assignment documentation and manual verification notes.
 
 ## Safety Boundaries

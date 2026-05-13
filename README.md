@@ -49,18 +49,25 @@ After building:
 
 For the real Windows Service install/start flow, run PowerShell as Administrator and use `scripts/demo/install-service.ps1`.
 
-## Install
+## EXE Installer
 
-After a Release build, run PowerShell as Administrator:
+GitHub Actions builds a real administrator installer artifact:
+
+- artifact name: `antivirus-gui-installer`
+- file: `AntivirusGuiSetup.exe`
+
+The installer includes the app, service, demo docs/scripts, Microsoft Visual C++ Runtime installer, and Windows App Runtime 2.0 installer.
+
+Build it locally after a Release build:
 
 ```powershell
-.\installer\install.ps1 -StartService
+.\installer\build-installer.ps1 -BuildDir build-local-winui-clean -OutputDir out\installer
 ```
 
-Uninstall:
+Run the generated installer as Administrator:
 
 ```powershell
-.\installer\uninstall.ps1
+.\out\installer\AntivirusGuiSetup.exe
 ```
 
 ## CI Artifacts

@@ -41,7 +41,7 @@
 | 33 | Directory monitoring | Готово | `src/service/scan/DirectoryMonitor.*`, `src/winui/main.cpp` | WinUI start/stop monitoring | Service мониторит папку и сканирует изменённые файлы. |
 | 34 | Secure Desktop confirmation | Готово | `src/common/secure_stop_confirmation.cpp` | WinUI `Остановить службу` | Остановка требует Secure Desktop prompt. |
 | 35 | Process hardening | Готово | `src/common/process_hardening.cpp` | Логи service launch | Реализовано учебное DACL hardening без обхода безопасности Windows. |
-| 36 | Installer | Готово | `installer/install.ps1`, `installer/uninstall.ps1`, `CMakeLists.txt` | `installer/install.ps1 -StartService` от администратора | Есть PowerShell installer и CMake install для WinUI/service/bootstrap. |
+| 36 | Installer | Готово | `installer/AntivirusGui.nsi`, `installer/build-installer.ps1`, `.github/workflows/windows.yml` | GitHub artifact `antivirus-gui-installer` или `installer/build-installer.ps1` | Есть настоящий `AntivirusGuiSetup.exe`: ставит зависимости, WinUI GUI, service, docs/scripts и uninstall. |
 | 37 | Demo scripts | Готово | `scripts/demo/*` | Запустить порядок из `scripts/demo/README.md` | Есть scripts для build, service, license, threats, recovery, logs. |
 | 38 | Документация защиты | Готово | `docs/defense.md` | Открыть документ | Есть структура, речь, demo order и пояснения. |
 | 39 | PR descriptions | Готово | `docs/pr-descriptions.md` | Открыть документ | Есть summary для основных веток/проходов. |
@@ -69,11 +69,11 @@ ctest --test-dir build-local-winui-clean -C Release --output-on-failure
 .\build-local-extra-final\Release\AntivirusWinUi.exe
 ```
 
-Команды для installer demo из PowerShell от администратора:
+Команды для installer demo:
 
 ```powershell
-.\installer\install.ps1 -StartService
-.\installer\uninstall.ps1
+.\installer\build-installer.ps1 -BuildDir build-local-extra-final -OutputDir out\installer
+.\out\installer\AntivirusGuiSetup.exe
 ```
 
 ## Краткая речь на 3-5 минут
@@ -86,7 +86,7 @@ ctest --test-dir build-local-winui-clean -C Release --output-on-failure
 
 База хранится на диске как `avdb.bin`, рядом есть `avdb.bak`. При повреждении primary базы service пробует mock update server, backup и default demo database. Повреждённый manifest обрабатывается отдельно и принудительно ведёт к mock-update recovery. Directory monitoring работает в service: GUI только выбирает папку и показывает статус.
 
-В финальной версии основной GUI — `AntivirusWinUi.exe`. Qt target оставлен как legacy, но отключён по умолчанию. Сборка `build-local-winui-clean` проходит без Qt `CMAKE_PREFIX_PATH`. Для установки есть PowerShell installer, который копирует WinUI GUI, service и bootstrap DLL в Program Files и регистрирует службу.
+В финальной версии основной GUI — `AntivirusWinUi.exe`. Qt target оставлен как legacy, но отключён по умолчанию. Сборка `build-local-winui-clean` проходит без Qt `CMAKE_PREFIX_PATH`. Для 2.6 есть GitHub artifact `antivirus-gui-installer` с настоящим `AntivirusGuiSetup.exe`. Он ставит VC++ Runtime, Windows App Runtime 2.0, WinUI GUI, service, документацию и demo scripts, регистрирует службу и создаёт uninstall.
 
 ## Вероятные вопросы
 

@@ -77,7 +77,8 @@ Migrated the primary GUI from Qt Widgets to WinUI while keeping the Windows Serv
 - Ported status polling, login, logout, license activation, scan file/folder/fixed drives, directory monitoring, and secure service stop controls.
 - Switched the service session launcher to `AntivirusWinUi.exe`.
 - Disabled the legacy Qt target by default; it remains available with `-DANTIVIRUS_BUILD_GUI=ON`.
-- Updated demo scripts, CI, README, architecture notes, and defense notes for the WinUI build.
+- Added NSIS packaging for `AntivirusGuiSetup.exe` with VC++ Runtime and Windows App Runtime installers bundled.
+- Updated demo scripts, CI, README, architecture notes, and defense notes for the WinUI build and GitHub installer artifact.
 
 ### Verification
 
@@ -85,3 +86,4 @@ Migrated the primary GUI from Qt Widgets to WinUI while keeping the Windows Serv
 - `cmake -S . -B build-local-winui-clean -DCMAKE_BUILD_TYPE=Release`
 - `cmake --build build-local-winui-clean --config Release`
 - `ctest --test-dir build-local-winui-clean -C Release --output-on-failure`
+- `.\installer\build-installer.ps1 -BuildDir build-local-winui-clean -OutputDir out\installer`

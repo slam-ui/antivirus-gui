@@ -47,10 +47,13 @@ cmake --build build --config Release
 ## Task 2.6 Manual Checks
 
 1. Build Release with `scripts/demo/build-release.ps1`.
-2. Run PowerShell as Administrator.
-3. Install with `installer/install.ps1 -StartService`.
-4. Verify files are installed under `C:\Program Files\AntivirusGui`.
-5. Verify the Windows service is registered for automatic startup.
-6. Verify WinUI GUI and service launch.
-7. Uninstall with `installer/uninstall.ps1`.
-8. Verify service registration and installed files are removed.
+2. Build the installer with `installer/build-installer.ps1 -BuildDir build-local-extra-final -OutputDir out/installer`.
+3. Run PowerShell as Administrator.
+4. Install with `out/installer/AntivirusGuiSetup.exe`.
+5. Verify files are installed under `C:\Program Files\AntivirusGui`.
+6. Verify the Windows service is registered for automatic startup.
+7. Verify WinUI GUI and service launch.
+8. Uninstall through Windows Apps settings or `C:\Program Files\AntivirusGui\Uninstall.exe`.
+9. Verify service registration and installed files are removed.
+
+GitHub Actions also publishes `AntivirusGuiSetup.exe` in the `antivirus-gui-installer` artifact.

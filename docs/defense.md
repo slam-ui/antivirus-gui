@@ -116,12 +116,13 @@ Mock update server — локальная папка `C:\ProgramData\AntivirusGu
 9. Проверить monitoring через GUI и `.\scripts\demo\show-logs.ps1`.
 10. Показать recovery: `prepare-backup-recovery.ps1` и `prepare-mock-update-recovery.ps1`.
 
-Для демонстрации установки можно вместо шага 3 выполнить из админского PowerShell:
+Для демонстрации установки можно вместо шага 3 скачать GitHub Actions artifact `antivirus-gui-installer` и запустить от администратора:
 
 ```powershell
-.\installer\install.ps1 -StartService
-.\installer\uninstall.ps1
+.\AntivirusGuiSetup.exe
 ```
+
+EXE-инсталлер ставит VC++ Runtime, Windows App Runtime 2.0, `AntivirusWinUi.exe`, `AntivirusService.exe`, документацию и demo scripts, регистрирует `AntivirusGuiService` и создаёт uninstall.
 
 ## 16. Частые вопросы
 
