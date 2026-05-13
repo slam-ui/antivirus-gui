@@ -116,6 +116,13 @@ Mock update server — локальная папка `C:\ProgramData\AntivirusGu
 9. Проверить monitoring через GUI и `.\scripts\demo\show-logs.ps1`.
 10. Показать recovery: `prepare-backup-recovery.ps1` и `prepare-mock-update-recovery.ps1`.
 
+Для демонстрации установки можно вместо шага 3 выполнить из админского PowerShell:
+
+```powershell
+.\installer\install.ps1 -StartService
+.\installer\uninstall.ps1
+```
+
 ## 16. Частые вопросы
 
 **Это настоящий антивирус?** Нет, это учебная демонстрация архитектуры и алгоритмов на безопасных строковых сигнатурах.

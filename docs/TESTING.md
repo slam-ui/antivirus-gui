@@ -46,10 +46,11 @@ cmake --build build --config Release
 
 ## Task 2.6 Manual Checks
 
-1. Build the package target.
-2. Install the generated MSI.
-3. Verify files are installed under Program Files.
-4. Verify the Windows service is registered for automatic startup.
-5. Verify GUI and service launch.
-6. Uninstall the application.
-7. Verify service registration and installed files are removed.
+1. Build Release with `scripts/demo/build-release.ps1`.
+2. Run PowerShell as Administrator.
+3. Install with `installer/install.ps1 -StartService`.
+4. Verify files are installed under `C:\Program Files\AntivirusGui`.
+5. Verify the Windows service is registered for automatic startup.
+6. Verify WinUI GUI and service launch.
+7. Uninstall with `installer/uninstall.ps1`.
+8. Verify service registration and installed files are removed.

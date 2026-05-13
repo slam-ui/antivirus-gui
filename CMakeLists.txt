@@ -360,3 +360,4 @@ endif()
 
 install(FILES README.md DESTINATION .)
 install(DIRECTORY docs/ DESTINATION docs)
+install(DIRECTORY installer/ DESTINATION installer FILES_MATCHING PATTERN "*.ps1")

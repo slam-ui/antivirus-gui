@@ -49,6 +49,20 @@ After building:
 
 For the real Windows Service install/start flow, run PowerShell as Administrator and use `scripts/demo/install-service.ps1`.
 
+## Install
+
+After a Release build, run PowerShell as Administrator:
+
+```powershell
+.\installer\install.ps1 -StartService
+```
+
+Uninstall:
+
+```powershell
+.\installer\uninstall.ps1
+```
+
 ## CI Artifacts
 
 The Windows workflow restores WinApp SDK packages, configures CMake, builds the Release targets, and uploads the WinUI GUI, service, tests, and bootstrap DLL as artifacts.
