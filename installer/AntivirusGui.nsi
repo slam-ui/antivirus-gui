@@ -34,18 +34,18 @@ Section "Prerequisites" SEC_PREREQ
     File /oname=vc_redist.x64.exe "${DEPS_DIR}\vc_redist.x64.exe"
     File /oname=windowsappruntimeinstall-x64.exe "${DEPS_DIR}\windowsappruntimeinstall-x64.exe"
 
-    DetailPrint "Installing Microsoft Visual C++ Runtime..."
+    DetailPrint "Установка Microsoft Visual C++ Runtime..."
     ExecWait '"$TEMP\AntivirusGuiSetup\vc_redist.x64.exe" /install /quiet /norestart' $0
     ${If} $0 != 0
     ${AndIf} $0 != 3010
-        MessageBox MB_ICONEXCLAMATION "Microsoft Visual C++ Runtime installer returned code $0. Setup will continue, but the application may need this dependency."
+        MessageBox MB_ICONEXCLAMATION "Установщик Microsoft Visual C++ Runtime вернул код $0. Установка продолжится, но приложению может потребоваться эта зависимость."
     ${EndIf}
 
-    DetailPrint "Installing Windows App Runtime 2.0..."
+    DetailPrint "Установка Windows App Runtime 2.0..."
     ExecWait '"$TEMP\AntivirusGuiSetup\windowsappruntimeinstall-x64.exe" --quiet' $0
     ${If} $0 != 0
     ${AndIf} $0 != 3010
-        MessageBox MB_ICONEXCLAMATION "Windows App Runtime installer returned code $0. Setup will continue, but the WinUI interface may need this dependency."
+        MessageBox MB_ICONEXCLAMATION "Установщик Windows App Runtime вернул код $0. Установка продолжится, но WinUI-интерфейсу может потребоваться эта зависимость."
     ${EndIf}
 SectionEnd
 
@@ -56,16 +56,16 @@ Section "Application" SEC_APP
     SetOutPath "$TEMP\AntivirusGuiSetup"
     File /oname=AntivirusCtl.exe "${BUILD_DIR}\Release\AntivirusCtl.exe"
 
-    DetailPrint "Requesting existing service stop through RPC..."
+    DetailPrint "Запрос остановки существующей службы через RPC..."
     ExecWait '"$TEMP\AntivirusGuiSetup\AntivirusCtl.exe" --request-stop' $0
     Sleep 3000
 
-    DetailPrint "Stopping old GUI processes if present..."
+    DetailPrint "Остановка старых процессов GUI, если они запущены..."
     nsExec::ExecToLog 'taskkill.exe /IM AntivirusWinUi.exe /F /T'
     nsExec::ExecToLog 'taskkill.exe /IM AntivirusGui.exe /F /T'
     Sleep 1000
 
-    DetailPrint "Stopping existing service if present..."
+    DetailPrint "Остановка существующей службы, если она установлена..."
     ExecWait 'sc.exe stop ${SERVICE_NAME}' $0
     Sleep 2000
 
@@ -79,12 +79,9 @@ Section "Application" SEC_APP
     File "${BUILD_DIR}\Release\AntivirusCtl.exe"
     File "${BUILD_DIR}\Release\Microsoft.WindowsAppRuntime.Bootstrap.dll"
 
-    SetOutPath "$INSTDIR\docs"
-    File "${PROJECT_ROOT}\README.md"
-    File "${PROJECT_ROOT}\docs\defense.md"
-    File "${PROJECT_ROOT}\docs\final-audit.md"
-    File "${PROJECT_ROOT}\docs\pr-descriptions.md"
-    File "${PROJECT_ROOT}\docs\TESTING.md"
+    SetOutPath "$INSTDIR\docx"
+    File /oname=project-readme.md "${PROJECT_ROOT}\README.md"
+    File "${PROJECT_ROOT}\docx\*.md"
 
     SetOutPath "$INSTDIR\scripts\demo"
     File "${PROJECT_ROOT}\scripts\demo\README.md"
@@ -93,14 +90,14 @@ Section "Application" SEC_APP
     SetOutPath "$INSTDIR"
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-    DetailPrint "Registering Windows service..."
+    DetailPrint "Регистрация Windows-службы..."
     ExecWait '"$INSTDIR\AntivirusService.exe" --install' $0
     ${If} $0 != 0
-        MessageBox MB_ICONSTOP "Service install failed with code $0."
+        MessageBox MB_ICONSTOP "Не удалось установить службу. Код ошибки: $0."
         Abort
     ${EndIf}
 
-    DetailPrint "Starting Windows service..."
+    DetailPrint "Запуск Windows-службы..."
     ExecWait 'sc.exe start ${SERVICE_NAME}' $0
 
     CreateDirectory "$SMPROGRAMS\Antivirus GUI"
@@ -121,7 +118,7 @@ Section "Uninstall"
     SetShellVarContext all
     SetRegView 64
 
-    DetailPrint "Stopping service..."
+    DetailPrint "Остановка службы..."
     ExecWait 'sc.exe stop ${SERVICE_NAME}' $0
     Sleep 2000
 
@@ -137,6 +134,7 @@ Section "Uninstall"
     Delete "$INSTDIR\AntivirusCtl.exe"
     Delete "$INSTDIR\Microsoft.WindowsAppRuntime.Bootstrap.dll"
     Delete "$INSTDIR\Uninstall.exe"
+    RMDir /r "$INSTDIR\docx"
     RMDir /r "$INSTDIR\docs"
     RMDir /r "$INSTDIR\scripts"
     RMDir "$INSTDIR"

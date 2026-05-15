@@ -1,4 +1,4 @@
-# Собирает Release-версию проекта через CMake и выводит пути к готовым exe.
+﻿# Собирает Release-версию проекта через CMake и выводит пути к готовым exe.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -15,7 +15,7 @@ try {
     $ServiceExe = Join-Path $BuildDir 'Release\AntivirusService.exe'
 
     Write-Host "WinUI GUI: $GuiExe"
-    Write-Host "Service:   $ServiceExe"
+    Write-Host "Служба:    $ServiceExe"
 } finally {
     Pop-Location
 }

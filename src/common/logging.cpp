@@ -77,7 +77,7 @@ void write_file_log(const std::wstring& line) {
         std::wofstream file(log_file_path(), std::ios::app);
         file << line;
     } catch (...) {
-        // Logging must never crash the application or the service.
+        // Логирование не должно ронять приложение или службу.
     }
 }
 

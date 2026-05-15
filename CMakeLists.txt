@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 project(
     AntivirusGuiProject
     VERSION 0.1.0
-    DESCRIPTION "Educational Windows antivirus GUI scaffold"
+    DESCRIPTION "Учебное Windows-приложение Antivirus GUI"
     LANGUAGES C CXX
 )
 
@@ -401,6 +401,6 @@ if(ANTIVIRUS_BUILD_TESTS)
     add_test(NAME AntivirusScanTests COMMAND AntivirusScanTests)
 endif()
 
-install(FILES README.md DESTINATION .)
-install(DIRECTORY docs/ DESTINATION docs)
+install(FILES README.md DESTINATION docx RENAME project-readme.md)
+install(DIRECTORY docx/ DESTINATION docx)
 install(DIRECTORY installer/ DESTINATION installer FILES_MATCHING PATTERN "*.ps1")

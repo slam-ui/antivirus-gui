@@ -2,6 +2,7 @@
 
 #include "service/scan/AvUpdateClient.h"
 
+#include <algorithm>
 #include <array>
 #include <fstream>
 #include <limits>
@@ -155,6 +156,40 @@ bool readRecord(std::ifstream& input, AvRecord& record)
     return true;
 }
 
+bool sameRecordIdentity(const AvRecord& left, const AvRecord& right)
+{
+    return left.objectSignaturePrefix == right.objectSignaturePrefix
+        && left.objectSignatureLength == right.objectSignatureLength
+        && left.objectSignature == right.objectSignature
+        && left.offsetBegin == right.offsetBegin
+        && left.offsetEnd == right.offsetEnd
+        && left.objectType == right.objectType
+        && left.threatName == right.threatName;
+}
+
+std::vector<AvRecord> replaceCorruptedRecordsFromServer(const AvDatabaseLoadResult& primary,
+                                                        const AvDatabaseLoadResult& server,
+                                                        std::uint32_t& repairedCount)
+{
+    std::vector<AvRecord> repairedRecords = primary.records;
+    repairedCount = 0;
+
+    for (const AvRecord& corruptedRecord : primary.corruptedRecords) {
+        const auto found = std::find_if(server.records.begin(), server.records.end(), [&](const AvRecord& serverRecord) {
+            return sameRecordIdentity(corruptedRecord, serverRecord);
+        });
+
+        if (found == server.records.end()) {
+            continue;
+        }
+
+        repairedRecords.push_back(*found);
+        ++repairedCount;
+    }
+
+    return repairedRecords;
+}
+
 } // namespace
 
 AvDatabaseStorage::AvDatabaseStorage()
@@ -193,40 +228,71 @@ AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
     }
 
     std::vector<std::wstring> events;
-    events.push_back(L"Primary database invalid");
+    events.push_back(L"Основная база повреждена");
 
     if (primary.error == AvDatabaseLoadError::InvalidManifestSignature) {
-        events.push_back(L"Manifest signature is invalid; forcing update from mock update server");
+        events.push_back(L"Подпись manifest неверна; выполняется принудительное обновление с mock update server");
     }
 
-    events.push_back(L"Trying to repair database from mock update server");
+    if (primary.loaded && primary.skippedRecordCount > 0) {
+        events.push_back(L"Найдены повреждённые записи базы; запрошены замены с mock update server");
+    }
+
+    events.push_back(L"Попытка восстановить базу через mock update server");
 
     const AvUpdateClient updateClient;
     AvDatabaseLoadResult server = updateClient.fetchDatabase();
     if (server.loaded) {
+        if (primary.loaded && primary.skippedRecordCount > 0) {
+            std::uint32_t repairedCount = 0;
+            std::vector<AvRecord> repairedRecords = replaceCorruptedRecordsFromServer(primary, server, repairedCount);
+
+            if (repairedCount == primary.skippedRecordCount) {
+                AvDatabaseLoadResult repaired = primary;
+                repaired.loaded = true;
+                repaired.repairedFromMockUpdateServer = true;
+                repaired.primaryError = primary.error;
+                repaired.skippedRecordCount = 0;
+                repaired.error = AvDatabaseLoadError::None;
+                repaired.records = std::move(repairedRecords);
+                repaired.corruptedRecords.clear();
+                repaired.events = events;
+                repaired.events.push_back(L"Повреждённые записи восстановлены через mock update server");
+                repaired.message = L"Повреждённые записи базы запрошены и восстановлены через mock update server";
+
+                if (!writeDatabase(repaired.releaseDate, repaired.records)) {
+                    repaired.events.push_back(L"Не удалось записать восстановленную базу в основной файл");
+                }
+
+                return repaired;
+            }
+
+            events.push_back(L"Mock update server не содержит все записи для замены; база заменяется целиком");
+        }
+
         server.repairedFromMockUpdateServer = true;
         server.primaryError = primary.error;
         server.events = events;
-        server.events.push_back(L"Database repaired from mock update server");
-        server.message = L"Database repaired from mock update server";
+        server.events.push_back(L"База восстановлена через mock update server");
+        server.message = L"База восстановлена через mock update server";
 
         if (!writeDatabase(server.releaseDate, server.records)) {
-            server.events.push_back(L"Failed to write repaired database to primary path");
+            server.events.push_back(L"Не удалось записать восстановленную базу в основной файл");
         }
 
         return server;
     }
 
-    events.push_back(server.mockUpdateServerUnavailable ? L"Mock update server unavailable"
-                                                        : L"Mock update server database is invalid");
+    events.push_back(server.mockUpdateServerUnavailable ? L"Mock update server недоступен"
+                                                        : L"База mock update server повреждена");
 
     AvDatabaseLoadResult backup = loadSingleFile(backupPath());
     if (backup.loaded) {
         backup.recoveredFromBackup = true;
         backup.primaryError = primary.error;
         backup.events = events;
-        backup.events.push_back(L"Recovered from backup");
-        backup.message = L"Primary antivirus database is invalid; recovered from backup";
+        backup.events.push_back(L"Восстановлено из backup");
+        backup.message = L"Основная антивирусная база повреждена; выполнено восстановление из backup";
 
         (void)std::filesystem::copy_file(backupPath(),
                                          databasePath(),
@@ -243,10 +309,10 @@ AvDatabaseLoadResult AvDatabaseStorage::loadOrRecover() const
     fallback.events = events;
 
     if (fallback.loaded) {
-        fallback.events.push_back(L"Loaded default database");
-        fallback.message = L"Primary and backup antivirus databases are invalid; loaded default database";
+        fallback.events.push_back(L"Загружена база по умолчанию");
+        fallback.message = L"Основная и backup базы повреждены; загружена база по умолчанию";
     } else {
-        fallback.message = L"Failed to load primary, backup, and default antivirus databases";
+        fallback.message = L"Не удалось загрузить основную, backup и default базы";
     }
 
     return fallback;
@@ -374,6 +440,7 @@ AvDatabaseLoadResult AvDatabaseStorage::loadSingleFile(const std::filesystem::pa
         if (record.avRecordSignature != expectedRecordSignature) {
             result.error = AvDatabaseLoadError::InvalidRecordSignature;
             ++result.skippedRecordCount;
+            result.corruptedRecords.push_back(record);
             continue;
         }
 

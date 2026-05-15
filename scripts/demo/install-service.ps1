@@ -1,4 +1,4 @@
-# Переустанавливает Windows-службу из Release-сборки, запускает её и показывает sc query.
+﻿# Переустанавливает Windows-службу из Release-сборки, запускает её и показывает sc query.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -7,7 +7,7 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $ServiceExe = Join-Path $ProjectRoot 'build-local-extra-final\Release\AntivirusService.exe'
 
 if (-not (Test-Path $ServiceExe)) {
-    throw "Service executable not found. Run scripts/demo/build-release.ps1 first."
+    throw "Исполняемый файл службы не найден. Сначала запустите scripts/demo/build-release.ps1."
 }
 
 Stop-Process -Name 'AntivirusWinUi' -Force -ErrorAction SilentlyContinue
@@ -26,7 +26,7 @@ if ($null -ne $existing) {
 
 & $ServiceExe --install
 if ($LASTEXITCODE -ne 0) {
-    throw "Service install failed with exit code $LASTEXITCODE."
+    throw "Установка службы завершилась с кодом $LASTEXITCODE."
 }
 
 Start-Service -Name $ServiceName

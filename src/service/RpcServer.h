@@ -23,6 +23,16 @@ struct DirectoryMonitorInfo {
     std::wstring lastError;
 };
 
+struct ScanScheduleInfo {
+    bool running = false;
+    long targetType = 0;
+    std::wstring path;
+    std::uint32_t intervalSeconds = 0;
+    std::wstring lastRunAt;
+    std::wstring lastDetails;
+    std::wstring lastError;
+};
+
 struct RpcScanResult {
     bool scanned = false;
     bool malicious = false;
@@ -61,5 +71,8 @@ RpcScanResult scanFixedDrivesFromRpc();
 DirectoryMonitorInfo startDirectoryMonitorFromRpc(const wchar_t* path);
 DirectoryMonitorInfo stopDirectoryMonitorFromRpc();
 DirectoryMonitorInfo queryDirectoryMonitorStatusFromRpc();
+ScanScheduleInfo startScanScheduleFromRpc(long targetType, const wchar_t* path, std::uint32_t intervalSeconds);
+ScanScheduleInfo stopScanScheduleFromRpc();
+ScanScheduleInfo queryScanScheduleStatusFromRpc();
 
 } // namespace antivirus::service

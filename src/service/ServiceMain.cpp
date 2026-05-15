@@ -12,10 +12,14 @@
 #include "service/scan/DirectoryMonitor.h"
 #include "service/scan/FileScanner.h"
 
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <windows.h>
 #include <winsvc.h>
 #include <wtsapi32.h>
@@ -25,6 +29,11 @@ namespace {
 
 constexpr wchar_t kServiceName[] = L"AntivirusGuiService";
 constexpr wchar_t kServiceDisplayName[] = L"Antivirus GUI Service";
+constexpr long kScheduleTargetFile = 1;
+constexpr long kScheduleTargetDirectory = 2;
+constexpr long kScheduleTargetFixedDrives = 3;
+constexpr std::uint32_t kMinScheduleIntervalSeconds = 5;
+constexpr std::uint32_t kMaxScheduleIntervalSeconds = 24 * 60 * 60;
 
 class ServiceRuntime;
 ServiceRuntime* g_runtime = nullptr;
@@ -58,6 +67,50 @@ private:
 std::wstring pathOrEmpty(const wchar_t* path)
 {
     return path != nullptr ? path : L"";
+}
+
+std::uint32_t normalizeScheduleInterval(std::uint32_t intervalSeconds)
+{
+    if (intervalSeconds < kMinScheduleIntervalSeconds) {
+        return kMinScheduleIntervalSeconds;
+    }
+
+    if (intervalSeconds > kMaxScheduleIntervalSeconds) {
+        return kMaxScheduleIntervalSeconds;
+    }
+
+    return intervalSeconds;
+}
+
+std::wstring nowText()
+{
+    SYSTEMTIME time{};
+    GetLocalTime(&time);
+
+    wchar_t buffer[64]{};
+    swprintf_s(buffer,
+               L"%04u-%02u-%02u %02u:%02u:%02u",
+               time.wYear,
+               time.wMonth,
+               time.wDay,
+               time.wHour,
+               time.wMinute,
+               time.wSecond);
+    return buffer;
+}
+
+std::wstring scheduleTargetName(long targetType)
+{
+    switch (targetType) {
+    case kScheduleTargetFile:
+        return L"файл";
+    case kScheduleTargetDirectory:
+        return L"папка";
+    case kScheduleTargetFixedDrives:
+        return L"все несъёмные диски";
+    default:
+        return L"неизвестная цель";
+    }
 }
 
 std::wstring buildFileScanDetails(const scan::FileScanReport& report)
@@ -142,6 +195,7 @@ public:
         WaitForSingleObject(stopEvent_, INFINITE);
 
         setStatus(SERVICE_STOP_PENDING);
+        stopScanSchedule();
         directoryMonitor_.stop();
         updateScheduler_.stop();
         sessionManager_.stopAllGuiChildren();
@@ -200,6 +254,7 @@ public:
     {
         const AuthState state = authManager_.logout();
         licenseManager_.clear();
+        stopScanSchedule();
         directoryMonitor_.stop();
 
         {
@@ -467,7 +522,95 @@ public:
         };
     }
 
+    ScanScheduleInfo startScanSchedule(long targetType, const wchar_t* path, std::uint32_t intervalSeconds)
+    {
+        ScanScheduleInfo info;
+        info.targetType = targetType;
+        info.path = pathOrEmpty(path);
+        info.intervalSeconds = normalizeScheduleInterval(intervalSeconds);
+
+        const FeatureState feature = featureState();
+        if (!feature.enabled) {
+            info.lastError = feature.blockedReason.empty() ? L"Функция заблокирована" : feature.blockedReason;
+            return info;
+        }
+
+        if ((targetType == kScheduleTargetFile || targetType == kScheduleTargetDirectory) && info.path.empty()) {
+            info.lastError = L"Для расписания нужно выбрать путь";
+            return info;
+        }
+
+        if (targetType != kScheduleTargetFile
+            && targetType != kScheduleTargetDirectory
+            && targetType != kScheduleTargetFixedDrives) {
+            info.lastError = L"Неизвестный тип расписания сканирования";
+            return info;
+        }
+
+        {
+            std::lock_guard lock(databaseMutex_);
+            if (!database_.loaded()) {
+                info.lastError = L"Антивирусная база не загружена";
+                return info;
+            }
+        }
+
+        {
+            std::lock_guard controlLock(scheduleControlMutex_);
+            stopScanScheduleUnlocked();
+
+            {
+                std::lock_guard lock(scheduleMutex_);
+                scheduleStopRequested_ = false;
+                scheduleInfo_ = info;
+                scheduleInfo_.running = true;
+                scheduleInfo_.lastError.clear();
+                scheduleInfo_.lastDetails = L"Ожидание первого запуска по расписанию";
+            }
+
+            scheduleThread_ = std::thread(
+                &ServiceRuntime::scanScheduleLoop,
+                this,
+                targetType,
+                info.path,
+                info.intervalSeconds);
+        }
+
+        antivirus::common::log_info(
+            L"Запущено сканирование по расписанию: " + scheduleTargetName(targetType)
+            + L", интервал " + std::to_wstring(info.intervalSeconds) + L" сек.");
+        return scanScheduleInfo();
+    }
+
+    ScanScheduleInfo stopScanSchedule()
+    {
+        std::lock_guard controlLock(scheduleControlMutex_);
+        return stopScanScheduleUnlocked();
+    }
+
+    ScanScheduleInfo scanScheduleInfo() const
+    {
+        std::lock_guard lock(scheduleMutex_);
+        return scheduleInfo_;
+    }
+
 private:
+    ScanScheduleInfo stopScanScheduleUnlocked()
+    {
+        {
+            std::lock_guard lock(scheduleMutex_);
+            scheduleStopRequested_ = true;
+        }
+        scheduleCv_.notify_all();
+
+        if (scheduleThread_.joinable()) {
+            scheduleThread_.join();
+        }
+
+        std::lock_guard lock(scheduleMutex_);
+        scheduleInfo_.running = false;
+        return scheduleInfo_;
+    }
     void setStatus(DWORD state)
     {
         status_.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
@@ -562,6 +705,61 @@ private:
         }
     }
 
+    RpcScanResult runScheduledScan(long targetType, const std::wstring& path)
+    {
+        switch (targetType) {
+        case kScheduleTargetFile:
+            return scanFile(path.c_str());
+        case kScheduleTargetDirectory:
+            return scanDirectory(path.c_str());
+        case kScheduleTargetFixedDrives:
+            return scanFixedDrives();
+        default:
+            return RpcScanResult{.lastError = L"Неизвестный тип расписания сканирования"};
+        }
+    }
+
+    void scanScheduleLoop(long targetType, std::wstring path, std::uint32_t intervalSeconds)
+    {
+        for (;;) {
+            {
+                std::lock_guard lock(scheduleMutex_);
+                if (scheduleStopRequested_) {
+                    scheduleInfo_.running = false;
+                    return;
+                }
+            }
+
+            const RpcScanResult result = runScheduledScan(targetType, path);
+
+            {
+                std::lock_guard lock(scheduleMutex_);
+                scheduleInfo_.running = true;
+                scheduleInfo_.lastRunAt = nowText();
+                scheduleInfo_.lastDetails = result.details.empty() ? result.lastError : result.details;
+                scheduleInfo_.lastError = result.lastError;
+            }
+
+            if (result.malicious || !result.lastError.empty()) {
+                antivirus::common::log_warning(
+                    L"Результат сканирования по расписанию (" + scheduleTargetName(targetType) + L"):\n"
+                    + (result.details.empty() ? result.lastError : result.details));
+            } else {
+                antivirus::common::log_info(
+                    L"Результат сканирования по расписанию (" + scheduleTargetName(targetType) + L"):\n"
+                    + result.details);
+            }
+
+            std::unique_lock lock(scheduleMutex_);
+            if (scheduleCv_.wait_for(lock, std::chrono::seconds(intervalSeconds), [this]() {
+                    return scheduleStopRequested_;
+                })) {
+                scheduleInfo_.running = false;
+                return;
+            }
+        }
+    }
+
     bool serviceMode_ = false;
     SERVICE_STATUS_HANDLE statusHandle_ = nullptr;
     SERVICE_STATUS status_{};
@@ -578,6 +776,13 @@ private:
     scan::AvUpdateScheduler updateScheduler_;
     scan::DirectoryMonitor directoryMonitor_;
     scan::FileScanner scanner_;
+
+    mutable std::mutex scheduleControlMutex_;
+    mutable std::mutex scheduleMutex_;
+    std::condition_variable scheduleCv_;
+    std::thread scheduleThread_;
+    bool scheduleStopRequested_ = false;
+    ScanScheduleInfo scheduleInfo_;
 };
 
 DWORD WINAPI serviceControlHandler(DWORD controlCode, DWORD eventType, void* eventData, void*)
@@ -735,6 +940,39 @@ DirectoryMonitorInfo queryDirectoryMonitorStatusFromRpc()
 
     return g_runtime->monitorInfo();
 }
+
+ScanScheduleInfo startScanScheduleFromRpc(long targetType, const wchar_t* path, std::uint32_t intervalSeconds)
+{
+    if (g_runtime == nullptr) {
+        return ScanScheduleInfo{
+            .targetType = targetType,
+            .path = pathOrEmpty(path),
+            .intervalSeconds = intervalSeconds,
+            .lastError = L"Служба недоступна",
+        };
+    }
+
+    return g_runtime->startScanSchedule(targetType, path, intervalSeconds);
+}
+
+ScanScheduleInfo stopScanScheduleFromRpc()
+{
+    if (g_runtime == nullptr) {
+        return ScanScheduleInfo{.lastError = L"Служба недоступна"};
+    }
+
+    return g_runtime->stopScanSchedule();
+}
+
+ScanScheduleInfo queryScanScheduleStatusFromRpc()
+{
+    if (g_runtime == nullptr) {
+        return ScanScheduleInfo{.lastError = L"Служба недоступна"};
+    }
+
+    return g_runtime->scanScheduleInfo();
+}
+
 int installService()
 {
     ServiceHandle scm(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CREATE_SERVICE));

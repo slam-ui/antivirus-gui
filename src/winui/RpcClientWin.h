@@ -4,6 +4,10 @@
 
 namespace antivirus::winui {
 
+constexpr long kScanScheduleFile = 1;
+constexpr long kScanScheduleDirectory = 2;
+constexpr long kScanScheduleFixedDrives = 3;
+
 struct AuthState {
     bool authenticated = false;
     std::wstring displayName;
@@ -50,6 +54,16 @@ struct DirectoryMonitorStatus {
     std::wstring lastError;
 };
 
+struct ScanScheduleStatus {
+    bool running = false;
+    long targetType = 0;
+    std::wstring path;
+    unsigned long intervalSeconds = 0;
+    std::wstring lastRunAt;
+    std::wstring lastDetails;
+    std::wstring lastError;
+};
+
 class RpcClientWin final {
 public:
     bool ping() const;
@@ -69,6 +83,9 @@ public:
     DirectoryMonitorStatus startDirectoryMonitor(const std::wstring& path) const;
     DirectoryMonitorStatus stopDirectoryMonitor() const;
     DirectoryMonitorStatus directoryMonitorStatus() const;
+    ScanScheduleStatus startScanSchedule(long targetType, const std::wstring& path, unsigned long intervalSeconds) const;
+    ScanScheduleStatus stopScanSchedule() const;
+    ScanScheduleStatus scanScheduleStatus() const;
 };
 
 } // namespace antivirus::winui

@@ -338,6 +338,59 @@ bool callGetDirectoryMonitorStatus(handle_t binding,
     return exceptionCode == kRpcOk;
 }
 
+bool callStartScanSchedule(handle_t binding,
+                           long targetType,
+                           const wchar_t* path,
+                           unsigned long intervalSeconds,
+                           AvScanScheduleStatus& status,
+                           unsigned long& exceptionCode)
+{
+    exceptionCode = kRpcOk;
+    RpcTryExcept
+    {
+        AvStartScanSchedule(binding, targetType, path, intervalSeconds, &status);
+    }
+    RpcExcept(1)
+    {
+        exceptionCode = RpcExceptionCode();
+    }
+    RpcEndExcept
+
+    return exceptionCode == kRpcOk;
+}
+
+bool callStopScanSchedule(handle_t binding, AvScanScheduleStatus& status, unsigned long& exceptionCode)
+{
+    exceptionCode = kRpcOk;
+    RpcTryExcept
+    {
+        AvStopScanSchedule(binding, &status);
+    }
+    RpcExcept(1)
+    {
+        exceptionCode = RpcExceptionCode();
+    }
+    RpcEndExcept
+
+    return exceptionCode == kRpcOk;
+}
+
+bool callGetScanScheduleStatus(handle_t binding, AvScanScheduleStatus& status, unsigned long& exceptionCode)
+{
+    exceptionCode = kRpcOk;
+    RpcTryExcept
+    {
+        AvGetScanScheduleStatus(binding, &status);
+    }
+    RpcExcept(1)
+    {
+        exceptionCode = RpcExceptionCode();
+    }
+    RpcEndExcept
+
+    return exceptionCode == kRpcOk;
+}
+
 AuthState convertAuthState(const AvAuthState& state)
 {
     return AuthState{
@@ -398,6 +451,19 @@ DirectoryMonitorStatus convertDirectoryMonitorStatus(const AvDirectoryMonitorSta
     return DirectoryMonitorStatus{
         .running = status.running != 0,
         .path = status.path,
+        .lastError = status.lastError,
+    };
+}
+
+ScanScheduleStatus convertScanScheduleStatus(const AvScanScheduleStatus& status)
+{
+    return ScanScheduleStatus{
+        .running = status.running != 0,
+        .targetType = status.targetType,
+        .path = status.path,
+        .intervalSeconds = status.intervalSeconds,
+        .lastRunAt = status.lastRunAt,
+        .lastDetails = status.lastDetails,
         .lastError = status.lastError,
     };
 }
@@ -650,6 +716,64 @@ DirectoryMonitorStatus RpcClientWin::directoryMonitorStatus() const
     }
 
     return convertDirectoryMonitorStatus(status);
+}
+
+ScanScheduleStatus RpcClientWin::startScanSchedule(long targetType, const std::wstring& path, unsigned long intervalSeconds) const
+{
+    RpcBinding binding;
+    AvScanScheduleStatus status{};
+    if (binding.get() == nullptr) {
+        return ScanScheduleStatus{
+            .targetType = targetType,
+            .path = path,
+            .intervalSeconds = intervalSeconds,
+            .lastError = rpcUnavailableMessage(),
+        };
+    }
+
+    unsigned long exceptionCode = kRpcOk;
+    if (!callStartScanSchedule(binding.get(), targetType, path.c_str(), intervalSeconds, status, exceptionCode)) {
+        return ScanScheduleStatus{
+            .targetType = targetType,
+            .path = path,
+            .intervalSeconds = intervalSeconds,
+            .lastError = rpcExceptionMessage(exceptionCode),
+        };
+    }
+
+    return convertScanScheduleStatus(status);
+}
+
+ScanScheduleStatus RpcClientWin::stopScanSchedule() const
+{
+    RpcBinding binding;
+    AvScanScheduleStatus status{};
+    if (binding.get() == nullptr) {
+        return ScanScheduleStatus{.lastError = rpcUnavailableMessage()};
+    }
+
+    unsigned long exceptionCode = kRpcOk;
+    if (!callStopScanSchedule(binding.get(), status, exceptionCode)) {
+        return ScanScheduleStatus{.lastError = rpcExceptionMessage(exceptionCode)};
+    }
+
+    return convertScanScheduleStatus(status);
+}
+
+ScanScheduleStatus RpcClientWin::scanScheduleStatus() const
+{
+    RpcBinding binding;
+    AvScanScheduleStatus status{};
+    if (binding.get() == nullptr) {
+        return ScanScheduleStatus{.lastError = rpcUnavailableMessage()};
+    }
+
+    unsigned long exceptionCode = kRpcOk;
+    if (!callGetScanScheduleStatus(binding.get(), status, exceptionCode)) {
+        return ScanScheduleStatus{.lastError = rpcExceptionMessage(exceptionCode)};
+    }
+
+    return convertScanScheduleStatus(status);
 }
 
 } // namespace antivirus::winui

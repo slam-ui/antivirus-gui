@@ -6,6 +6,7 @@ on:
       - main
       - "chore/**"
       - "task-**"
+      - "feature/**"
       - "feat/**"
       - "bugfix/**"
   pull_request:

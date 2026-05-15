@@ -32,6 +32,7 @@ struct AvDatabaseLoadResult {
     AvDatabaseLoadError primaryError = AvDatabaseLoadError::None;
     std::wstring releaseDate;
     std::vector<AvRecord> records;
+    std::vector<AvRecord> corruptedRecords;
     std::wstring message;
     std::vector<std::wstring> events;
 };

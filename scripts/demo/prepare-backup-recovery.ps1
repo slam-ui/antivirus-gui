@@ -1,4 +1,4 @@
-# Готовит сценарий восстановления из avdb.bak: копирует backup, портит primary, перезапускает службу и показывает лог.
+﻿# Готовит сценарий восстановления из avdb.bak: копирует backup, портит primary, перезапускает службу и показывает лог.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -9,7 +9,7 @@ $BackupPath = Join-Path $BaseDir 'avdb.bak'
 $LogPath = Join-Path $env:ProgramData 'AntivirusGui\service.log'
 
 if (-not (Test-Path $DbPath)) {
-    throw "Primary database not found: $DbPath"
+    throw "Основная база не найдена: $DbPath"
 }
 
 Copy-Item -LiteralPath $DbPath -Destination $BackupPath -Force
@@ -18,7 +18,7 @@ Copy-Item -LiteralPath $DbPath -Destination $BackupPath -Force
 Restart-Service -Name $ServiceName -Force
 Start-Sleep -Seconds 3
 
-Write-Host "Backup prepared: $BackupPath"
+Write-Host "Backup подготовлен: $BackupPath"
 if (Test-Path $LogPath) {
     Get-Content -LiteralPath $LogPath -Tail 120
 }

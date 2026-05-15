@@ -1,4 +1,4 @@
-# Готовит mock server для демонстрации активной лицензии.
+﻿# Готовит mock server для демонстрации активной лицензии.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -8,4 +8,4 @@ New-Item -ItemType Directory -Force -Path $MockServerDir | Out-Null
 $LicenseStatusPath = Join-Path $MockServerDir 'license-status.txt'
 Set-Content -LiteralPath $LicenseStatusPath -Value 'active' -Encoding ascii
 
-Write-Host "License mock status written: $LicenseStatusPath"
+Write-Host "Mock-статус лицензии записан: $LicenseStatusPath"

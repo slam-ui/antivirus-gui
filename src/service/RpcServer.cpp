@@ -104,6 +104,21 @@ void copyDirectoryMonitorInfo(const DirectoryMonitorInfo& source, AvDirectoryMon
     copyString(destination->lastError, source.lastError);
 }
 
+void copyScanScheduleInfo(const ScanScheduleInfo& source, AvScanScheduleStatus* destination)
+{
+    if (destination == nullptr) {
+        return;
+    }
+
+    destination->running = source.running ? 1 : 0;
+    destination->targetType = source.targetType;
+    copyString(destination->path, source.path);
+    destination->intervalSeconds = source.intervalSeconds;
+    copyString(destination->lastRunAt, source.lastRunAt);
+    copyString(destination->lastDetails, source.lastDetails);
+    copyString(destination->lastError, source.lastError);
+}
+
 } // namespace
 
 bool RpcServer::start()
@@ -238,4 +253,21 @@ void AvStopDirectoryMonitor(handle_t, AvDirectoryMonitorStatus* status)
 void AvGetDirectoryMonitorStatus(handle_t, AvDirectoryMonitorStatus* status)
 {
     antivirus::service::copyDirectoryMonitorInfo(antivirus::service::queryDirectoryMonitorStatusFromRpc(), status);
+}
+
+void AvStartScanSchedule(handle_t, long targetType, const wchar_t* path, unsigned long intervalSeconds, AvScanScheduleStatus* status)
+{
+    antivirus::service::copyScanScheduleInfo(
+        antivirus::service::startScanScheduleFromRpc(targetType, path, intervalSeconds),
+        status);
+}
+
+void AvStopScanSchedule(handle_t, AvScanScheduleStatus* status)
+{
+    antivirus::service::copyScanScheduleInfo(antivirus::service::stopScanScheduleFromRpc(), status);
+}
+
+void AvGetScanScheduleStatus(handle_t, AvScanScheduleStatus* status)
+{
+    antivirus::service::copyScanScheduleInfo(antivirus::service::queryScanScheduleStatusFromRpc(), status);
 }

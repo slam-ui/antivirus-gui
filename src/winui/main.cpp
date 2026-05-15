@@ -463,6 +463,48 @@ std::wstring monitorText(const antivirus::winui::DirectoryMonitorStatus& status)
     return L"Мониторинг выключен";
 }
 
+std::wstring scheduleTargetText(long targetType)
+{
+    switch (targetType) {
+    case antivirus::winui::kScanScheduleFile:
+        return L"файл";
+    case antivirus::winui::kScanScheduleDirectory:
+        return L"папка";
+    case antivirus::winui::kScanScheduleFixedDrives:
+        return L"все несъёмные диски";
+    default:
+        return L"цель не выбрана";
+    }
+}
+
+std::wstring scheduleText(const antivirus::winui::ScanScheduleStatus& status)
+{
+    if (!status.lastError.empty() && !status.running) {
+        return L"Расписание: " + status.lastError;
+    }
+
+    if (!status.running) {
+        return L"Расписание сканирования выключено";
+    }
+
+    std::wstring text = L"Расписание включено: " + scheduleTargetText(status.targetType)
+        + L", интервал " + std::to_wstring(status.intervalSeconds) + L" сек.";
+
+    if (!status.path.empty()) {
+        text += L"\nЦель: " + status.path;
+    }
+
+    if (!status.lastRunAt.empty()) {
+        text += L"\nПоследний запуск: " + status.lastRunAt;
+    }
+
+    if (!status.lastError.empty()) {
+        text += L"\nПоследняя ошибка: " + status.lastError;
+    }
+
+    return text;
+}
+
 std::wstring formatScanResult(const antivirus::winui::ScanResult& result)
 {
     std::wstringstream stream;
@@ -779,6 +821,39 @@ private:
             scanFixedDrives();
         });
         leftColumn.Children().Append(wrapCard(scanCard));
+
+        controls::StackPanel scheduleCard = makeCard(L"Сканирование по расписанию");
+        scheduleLabel_ = makeStatusText(L"Расписание: не проверено");
+        scheduleCard.Children().Append(scheduleLabel_);
+
+        scheduleIntervalBox_ = controls::TextBox();
+        scheduleIntervalBox_.Header(winrt::box_value(winrt::hstring{L"Интервал, секунд"}));
+        scheduleIntervalBox_.Text(L"60");
+        scheduleIntervalBox_.MinWidth(180);
+        scheduleIntervalBox_.HorizontalAlignment(mux::HorizontalAlignment::Left);
+        scheduleCard.Children().Append(scheduleIntervalBox_);
+
+        controls::StackPanel scheduleButtons;
+        scheduleButtons.Orientation(controls::Orientation::Horizontal);
+        scheduleButtons.Children().Append(scheduleFileButton_ = makeButton(L"Файл", L"\xE823", true));
+        scheduleButtons.Children().Append(scheduleDirectoryButton_ = makeButton(L"Папка", L"\xE8B7"));
+        scheduleButtons.Children().Append(scheduleFixedDrivesButton_ = makeButton(L"Все диски", L"\xEDA2"));
+        scheduleButtons.Children().Append(stopScheduleButton_ = makeButton(L"Остановить", L"\xE71A"));
+        scheduleCard.Children().Append(scheduleButtons);
+
+        scheduleFileButton_.Click([this](auto&&, auto&&) {
+            startScheduledFileScan();
+        });
+        scheduleDirectoryButton_.Click([this](auto&&, auto&&) {
+            startScheduledDirectoryScan();
+        });
+        scheduleFixedDrivesButton_.Click([this](auto&&, auto&&) {
+            startScheduledFixedDriveScan();
+        });
+        stopScheduleButton_.Click([this](auto&&, auto&&) {
+            stopScheduledScan();
+        });
+        leftColumn.Children().Append(wrapCard(scheduleCard));
 
         controls::StackPanel monitorCard = makeCard(L"Мониторинг");
         monitorLabel_ = makeStatusText(L"Мониторинг: не проверен");
@@ -1108,17 +1183,19 @@ private:
         const auto feature = rpcClient_.featureState();
         const auto database = rpcClient_.databaseInfo();
         const auto monitor = rpcClient_.directoryMonitorStatus();
+        const auto schedule = rpcClient_.scanScheduleStatus();
 
         accountLabel_.Text(authText(auth));
         licenseLabel_.Text(licenseText(license));
         featureLabel_.Text(featureText(feature));
         databaseLabel_.Text(databaseText(database));
         monitorLabel_.Text(monitorText(monitor));
+        scheduleLabel_.Text(scheduleText(schedule));
 
-        setActionButtonsEnabled(feature.functionalityEnabled, monitor.running, rpcAvailable);
+        setActionButtonsEnabled(feature.functionalityEnabled, monitor.running, schedule.running, rpcAvailable);
     }
 
-    void setActionButtonsEnabled(bool featureEnabled, bool monitorRunning, bool rpcAvailable)
+    void setActionButtonsEnabled(bool featureEnabled, bool monitorRunning, bool scheduleRunning, bool rpcAvailable)
     {
         const bool canUseFeature = featureEnabled && !busy_.load();
         const bool canCallRpc = rpcAvailable && !busy_.load();
@@ -1129,6 +1206,10 @@ private:
         scanFileButton_.IsEnabled(canUseFeature);
         scanDirectoryButton_.IsEnabled(canUseFeature);
         scanFixedDrivesButton_.IsEnabled(canUseFeature);
+        scheduleFileButton_.IsEnabled(canUseFeature);
+        scheduleDirectoryButton_.IsEnabled(canUseFeature);
+        scheduleFixedDrivesButton_.IsEnabled(canUseFeature);
+        stopScheduleButton_.IsEnabled(canUseFeature && scheduleRunning);
         startMonitorButton_.IsEnabled(canUseFeature);
         stopMonitorButton_.IsEnabled(canUseFeature && monitorRunning);
         stopServiceButton_.IsEnabled(canCallRpc);
@@ -1143,6 +1224,10 @@ private:
         scanFileButton_.IsEnabled(enabled);
         scanDirectoryButton_.IsEnabled(enabled);
         scanFixedDrivesButton_.IsEnabled(enabled);
+        scheduleFileButton_.IsEnabled(enabled);
+        scheduleDirectoryButton_.IsEnabled(enabled);
+        scheduleFixedDrivesButton_.IsEnabled(enabled);
+        stopScheduleButton_.IsEnabled(enabled);
         startMonitorButton_.IsEnabled(enabled);
         stopMonitorButton_.IsEnabled(enabled);
         stopServiceButton_.IsEnabled(enabled);
@@ -1255,6 +1340,81 @@ private:
         });
     }
 
+    unsigned long scheduleIntervalSeconds() const
+    {
+        const std::wstring text = scheduleIntervalBox_.Text().c_str();
+        try {
+            const unsigned long value = std::stoul(text);
+            if (value < 5) {
+                return 5;
+            }
+            if (value > 86400) {
+                return 86400;
+            }
+            return value;
+        } catch (...) {
+            return 60;
+        }
+    }
+
+    std::wstring formatScheduleStartResult(const antivirus::winui::ScanScheduleStatus& status) const
+    {
+        if (!status.lastError.empty()) {
+            return L"Расписание не запущено: " + status.lastError;
+        }
+
+        return L"Расписание запущено.\n" + scheduleText(status);
+    }
+
+    void startScheduledFileScan()
+    {
+        const std::optional<std::wstring> path = pickFile();
+        if (!path.has_value()) {
+            return;
+        }
+
+        const unsigned long intervalSeconds = scheduleIntervalSeconds();
+        runBackground(L"Настройка сканирования файла по расписанию...\n" + *path, [this, path = *path, intervalSeconds]() {
+            return formatScheduleStartResult(
+                rpcClient_.startScanSchedule(antivirus::winui::kScanScheduleFile, path, intervalSeconds));
+        });
+    }
+
+    void startScheduledDirectoryScan()
+    {
+        const std::optional<std::wstring> path = pickFolder(L"Выберите папку для сканирования по расписанию");
+        if (!path.has_value()) {
+            return;
+        }
+
+        const unsigned long intervalSeconds = scheduleIntervalSeconds();
+        runBackground(L"Настройка сканирования папки по расписанию...\n" + *path, [this, path = *path, intervalSeconds]() {
+            return formatScheduleStartResult(
+                rpcClient_.startScanSchedule(antivirus::winui::kScanScheduleDirectory, path, intervalSeconds));
+        });
+    }
+
+    void startScheduledFixedDriveScan()
+    {
+        const unsigned long intervalSeconds = scheduleIntervalSeconds();
+        runBackground(L"Настройка сканирования всех несъёмных дисков по расписанию...", [this, intervalSeconds]() {
+            return formatScheduleStartResult(
+                rpcClient_.startScanSchedule(antivirus::winui::kScanScheduleFixedDrives, L"", intervalSeconds));
+        });
+    }
+
+    void stopScheduledScan()
+    {
+        runBackground(L"Остановка сканирования по расписанию...", [this]() {
+            const auto status = rpcClient_.stopScanSchedule();
+            if (!status.lastError.empty()) {
+                return L"Расписание остановлено с предупреждением: " + status.lastError;
+            }
+
+            return std::wstring(L"Расписание сканирования остановлено.");
+        });
+    }
+
     void startMonitoring()
     {
         const std::optional<std::wstring> path = pickFolder(L"Выберите папку для мониторинга");
@@ -1312,11 +1472,13 @@ private:
     controls::TextBlock featureLabel_{nullptr};
     controls::TextBlock databaseLabel_{nullptr};
     controls::TextBlock monitorLabel_{nullptr};
+    controls::TextBlock scheduleLabel_{nullptr};
     controls::TextBlock busyLabel_{nullptr};
 
     controls::TextBox loginBox_{nullptr};
     controls::PasswordBox passwordBox_{nullptr};
     controls::TextBox activationBox_{nullptr};
+    controls::TextBox scheduleIntervalBox_{nullptr};
     controls::TextBox resultBox_{nullptr};
 
     controls::Button loginButton_{nullptr};
@@ -1325,6 +1487,10 @@ private:
     controls::Button scanFileButton_{nullptr};
     controls::Button scanDirectoryButton_{nullptr};
     controls::Button scanFixedDrivesButton_{nullptr};
+    controls::Button scheduleFileButton_{nullptr};
+    controls::Button scheduleDirectoryButton_{nullptr};
+    controls::Button scheduleFixedDrivesButton_{nullptr};
+    controls::Button stopScheduleButton_{nullptr};
     controls::Button startMonitorButton_{nullptr};
     controls::Button stopMonitorButton_{nullptr};
     controls::Button stopServiceButton_{nullptr};

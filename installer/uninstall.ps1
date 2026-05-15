@@ -1,4 +1,4 @@
-# Uninstalls the coursework Windows service and removes installed files.
+﻿# Удаляет учебную Windows-службу и установленные файлы приложения.
 param(
     [string]$InstallDir = (Join-Path $env:ProgramFiles 'AntivirusGui')
 )
@@ -19,7 +19,7 @@ if ($null -ne $existing) {
     if (Test-Path $serviceExe) {
         & $serviceExe --uninstall
         if ($LASTEXITCODE -ne 0) {
-            throw "Service uninstall failed with exit code $LASTEXITCODE."
+            throw "Удаление службы завершилось с кодом $LASTEXITCODE."
         }
     }
 }
@@ -28,10 +28,10 @@ if (Test-Path $InstallDir) {
     $resolvedInstallDir = (Resolve-Path $InstallDir).Path
     $programFiles = (Resolve-Path $env:ProgramFiles).Path
     if (-not $resolvedInstallDir.StartsWith($programFiles, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove directory outside Program Files: $resolvedInstallDir"
+        throw "Отказ от удаления каталога вне Program Files: $resolvedInstallDir"
     }
 
     Remove-Item -LiteralPath $resolvedInstallDir -Recurse -Force
 }
 
-Write-Host "Uninstalled from $InstallDir"
+Write-Host "Удалено из $InstallDir"

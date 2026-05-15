@@ -1,4 +1,4 @@
-# Installs the coursework WinUI GUI and Windows service from a Release build.
+﻿# Устанавливает учебный WinUI GUI и Windows-службу из Release-сборки.
 param(
     [string]$SourceDir = (Join-Path $PSScriptRoot '..\build-local-extra-final\Release'),
     [string]$InstallDir = (Join-Path $env:ProgramFiles 'AntivirusGui'),
@@ -20,7 +20,7 @@ $RequiredFiles = @(
 foreach ($file in $RequiredFiles) {
     $path = Join-Path $SourceDir $file
     if (-not (Test-Path $path)) {
-        throw "Required file not found: $path"
+        throw "Не найден обязательный файл: $path"
     }
 }
 
@@ -40,17 +40,17 @@ $serviceExe = Join-Path $InstallDir 'AntivirusService.exe'
 if ($null -ne $existing) {
     & $serviceExe --uninstall
     if ($LASTEXITCODE -ne 0) {
-        throw "Service uninstall failed with exit code $LASTEXITCODE."
+        throw "Удаление службы завершилось с кодом $LASTEXITCODE."
     }
 }
 
 & $serviceExe --install
 if ($LASTEXITCODE -ne 0) {
-    throw "Service install failed with exit code $LASTEXITCODE."
+    throw "Установка службы завершилась с кодом $LASTEXITCODE."
 }
 
 if ($StartService) {
     Start-Service -Name $ServiceName
 }
 
-Write-Host "Installed to $InstallDir"
+Write-Host "Установлено в $InstallDir"

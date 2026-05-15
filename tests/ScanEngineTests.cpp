@@ -94,6 +94,50 @@ bool corruptManifestSignature(const std::filesystem::path& databasePath)
     return file.good();
 }
 
+bool corruptFirstRecordSignature(const std::filesystem::path& databasePath)
+{
+    std::fstream file(databasePath, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    file.seekg(8, std::ios::beg);
+    std::uint32_t releaseDateLength = 0;
+    file.read(reinterpret_cast<char*>(&releaseDateLength), sizeof(releaseDateLength));
+    if (!file.good()) {
+        return false;
+    }
+
+    std::streamoff offset = 4 + 4 + 4 + static_cast<std::streamoff>(releaseDateLength * sizeof(std::uint16_t)) + 4 + 32;
+    offset += 8;
+    offset += 4;
+    offset += 32;
+    offset += 8;
+    offset += 8;
+    offset += 4;
+
+    file.seekg(offset, std::ios::beg);
+    std::uint32_t threatNameLength = 0;
+    file.read(reinterpret_cast<char*>(&threatNameLength), sizeof(threatNameLength));
+    if (!file.good()) {
+        return false;
+    }
+
+    offset += 4 + static_cast<std::streamoff>(threatNameLength * sizeof(std::uint16_t));
+    file.seekg(offset, std::ios::beg);
+
+    char byte = '\0';
+    file.read(&byte, sizeof(byte));
+    if (!file.good()) {
+        return false;
+    }
+
+    byte = static_cast<char>(byte ^ 0xff);
+    file.seekp(offset, std::ios::beg);
+    file.write(&byte, sizeof(byte));
+    return file.good();
+}
+
 } // namespace
 
 int main()
@@ -132,6 +176,16 @@ int main()
 
     AvDatabaseStorage primaryStorage;
     expect(primaryStorage.writeDefaultDatabase(), "Primary database is written", failures);
+    expect(corruptFirstRecordSignature(primaryStorage.databasePath()), "Primary record signature is corrupted", failures);
+
+    const auto repairedRecord = primaryStorage.loadOrRecover();
+    expect(repairedRecord.loaded, "Corrupted record database is recovered", failures);
+    expect(repairedRecord.repairedFromMockUpdateServer, "Corrupted record recovery uses mock update server", failures);
+    expect(repairedRecord.primaryError == AvDatabaseLoadError::InvalidRecordSignature, "Record corruption is tracked separately", failures);
+    expect(repairedRecord.skippedRecordCount == 0, "Corrupted record is replaced instead of skipped", failures);
+    expect(repairedRecord.records.size() == 2, "Repaired database keeps all demo records", failures);
+
+    expect(primaryStorage.writeDefaultDatabase(), "Primary database is rewritten before manifest test", failures);
     expect(corruptManifestSignature(primaryStorage.databasePath()), "Primary manifest signature is corrupted", failures);
 
     const auto repaired = primaryStorage.loadOrRecover();

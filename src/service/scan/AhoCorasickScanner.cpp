@@ -63,8 +63,8 @@ void AhoCorasickScanner::build(const std::vector<AhoCorasickPattern>& patterns)
         nodes_[static_cast<std::size_t>(state)].outputs.push_back(patternIndex);
     }
 
-    // Trie edges represent signature bytes. Failure links let the automaton reuse
-    // the longest suffix already matched instead of restarting a full search.
+    // Рёбра trie соответствуют байтам сигнатур. Failure-ссылки позволяют автомату
+    // переиспользовать уже найденный длинный суффикс вместо полного перезапуска поиска.
     std::queue<int> queue;
     for (std::size_t byte = 0; byte < kAlphabetSize; ++byte) {
         const int child = nodes_[0].next[byte];

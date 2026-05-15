@@ -1,4 +1,4 @@
-# Создаёт безопасные учебные файлы для проверки PE, PowerShell и clean scan.
+﻿# Создаёт безопасные учебные файлы для проверки PE, PowerShell и clean scan.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -13,5 +13,5 @@ $CleanPath = Join-Path $TestDir 'clean.txt'
 Set-Content -LiteralPath $PsPath -Value 'Write-Host "demo"; Invoke-AvGuiTest' -Encoding ascii
 Set-Content -LiteralPath $CleanPath -Value 'Clean educational file without demo signatures.' -Encoding ascii
 
-Write-Host "Test files created in: $TestDir"
+Write-Host "Тестовые файлы созданы в: $TestDir"
 Get-ChildItem -LiteralPath $TestDir

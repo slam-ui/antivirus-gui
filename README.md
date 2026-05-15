@@ -1,77 +1,82 @@
 # Antivirus GUI
 
-Educational Windows C++20 project for antivirus GUI coursework. The project is intentionally limited to benign UI, service, IPC, authentication/licensing, and installer exercises. It does not implement malware behavior, process hiding, system protection bypasses, or real antivirus scanning.
+Учебный проект на C++20 для заданий 2.1-2.6: WinUI-интерфейс, Windows-служба, локальный RPC, авторизация, лицензия, антивирусная база, сканирование, обновления, мониторинг, расписание и EXE-инсталлер.
 
-## Covered Assignments
+Проект безопасный и демонстрационный. Он не реализует вредоносное поведение, скрытие процессов, обход системной защиты или настоящий промышленный антивирус.
 
-- Task 2.1: GUI lifecycle foundation; the primary GUI is now WinUI.
-- Task 2.2: Windows service, session launch, and local RPC interaction.
-- Task 2.3: account login, activation, and license-gated features.
-- Task 2.4: antivirus database loading, file/folder/fixed-drive scanning, monitoring, and Aho-Corasick extra point.
-- Task 2.5: on-disk antivirus database storage, update/recovery, backup, corrupted records, and forced update for a bad manifest.
-- Extra points: CMake build, secure stop confirmation, and documented DACL hardening.
-- Task 2.6: Windows installer packaging.
+## Что закрыто
 
-The project provides a C++20/CMake Windows Service, local RPC, WinUI GUI, database scanning, demo update/recovery scripts, and coursework documentation.
+- Задание 2.1: GUI, трей, меню, запуск без окна, один экземпляр, CMake/MSBuild.
+- Задание 2.2: Windows-служба, запуск GUI в пользовательских сессиях, RPC over ALPC, остановка через RPC.
+- Задание 2.3: вход, выход, активация продукта, блокировка функций без лицензии.
+- Задание 2.4: антивирусная база в памяти, сканирование файла, папки и всех несъёмных дисков, мониторинг директорий, расписание, Ахо-Корасик.
+- Задание 2.5: хранение базы на диске, проверка целостности, backup, rollback, восстановление повреждённых записей, forced update при повреждённом manifest.
+- Задание 2.6: EXE-инсталлер с зависимостями, установкой службы, ярлыками и uninstall.
+- Дополнительные пункты: WinUI, CMake, Secure Desktop confirmation, DACL hardening, Ахо-Корасик, мониторинг, расписание, обновление баз и recovery.
 
-## Build
+## Документация для сдачи
 
-Prerequisites:
+Материалы, которые удобно открыть преподавателю, лежат в `docx`:
 
-- Windows with Visual Studio 2022 Build Tools or Visual Studio 2022.
-- CMake 3.24 or newer.
-- Node.js/npm for `npx @microsoft/winappcli restore`.
-- Windows App SDK packages restored by `winappcli` from `winapp.yaml`.
+- `docx/checklist.md` - полный чеклист по заданиям 2.1-2.6 и дополнительным пунктам.
+- `docx/demo.md` - порядок демонстрации приложения и инсталлера.
+- `docx/answers.md` - короткие ответы на вероятные вопросы.
+
+Данные для демонстрации:
+
+- логин: `demo`
+- пароль: `demo`
+- код активации: `DEMO-1234`
+
+## Сборка
+
+Требования:
+
+- Windows;
+- Visual Studio 2022 или Visual Studio 2022 Build Tools;
+- CMake 3.24+;
+- Node.js/npm для восстановления WinUI-зависимостей через `@microsoft/winappcli`;
+- NSIS 3.x для локальной сборки EXE-инсталлера.
 
 ```powershell
 npx --yes @microsoft/winappcli restore
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
+cmake -S . -B build-local-winui-ui -DCMAKE_BUILD_TYPE=Release
+cmake --build build-local-winui-ui --config Release
+ctest --test-dir build-local-winui-ui -C Release --output-on-failure
 ```
 
-The legacy Qt Widgets target is disabled by default. Build it only when needed with `-DANTIVIRUS_BUILD_GUI=ON` and a Qt 6 `CMAKE_PREFIX_PATH`.
+Старый Qt Widgets target по умолчанию отключён. Основной GUI в этой ветке - `AntivirusWinUi.exe`.
 
-## Run GUI
+## Запуск без установки
 
-After building:
+Для демонстрационного запуска после сборки:
 
 ```powershell
-.\build\Release\AntivirusWinUi.exe --allow-standalone-debug --show
+.\build-local-winui-ui\Release\AntivirusService.exe --console
+.\build-local-winui-ui\Release\AntivirusWinUi.exe --allow-standalone-debug --show
 ```
 
-The WinUI GUI talks to the service through Windows RPC. In the installed flow, run `AntivirusWinUi.exe` normally: it starts the service if needed, asks the service-owned hidden GUI window to show, and exits without creating a second tray icon.
+В нормальном установленном сценарии GUI запускается службой и общается с ней через Windows RPC.
 
-## Run Service
+## Инсталлер
 
-After building:
-
-```powershell
-.\build\Release\AntivirusService.exe --console
-```
-
-For the real Windows Service install/start flow, run PowerShell as Administrator and use `scripts/demo/install-service.ps1`.
-
-## EXE Installer
-
-GitHub Actions builds a real administrator installer artifact:
-
-- artifact name: `antivirus-gui-installer`
-- file: `AntivirusGuiSetup.exe`
-
-The installer includes the app, service, RPC stop helper, demo docs/scripts, Microsoft Visual C++ Runtime installer, and Windows App Runtime 2.0 installer. During upgrades it requests service stop through RPC before replacing files.
-
-Build it locally after a Release build:
+Собрать локальный EXE-инсталлер:
 
 ```powershell
 .\installer\build-installer.ps1 -BuildDir build-local-winui-ui -OutputDir out\installer
 ```
 
-Run the generated installer as Administrator:
+Запустить от администратора:
 
 ```powershell
 .\out\installer\AntivirusGuiSetup.exe
 ```
 
-## CI Artifacts
+Инсталлер ставит VC++ Runtime, Windows App Runtime 2.0, копирует приложение в `C:\Program Files\AntivirusGui`, регистрирует службу `AntivirusGuiService`, запускает её, создаёт ярлыки и добавляет uninstall.
 
-The Windows workflow restores WinApp SDK packages, configures CMake, builds the Release targets, and uploads the WinUI GUI, service, tests, and bootstrap DLL as artifacts.
+## GitHub Actions
+
+Windows workflow восстанавливает WinUI-зависимости, собирает Release, запускает тесты и публикует артефакты:
+
+- `antivirus-gui-windows-release`;
+- `antivirus-gui-installer` с файлом `AntivirusGuiSetup.exe`.

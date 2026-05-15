@@ -1,4 +1,4 @@
-# Builds a single admin EXE installer with bundled prerequisites.
+﻿# Собирает единый EXE-инсталлер администратора со всеми обязательными зависимостями.
 param(
     [string]$BuildDir = (Join-Path $PSScriptRoot '..\build-local-winui-clean'),
     [string]$OutputDir = (Join-Path $PSScriptRoot '..\out\installer')
@@ -26,7 +26,7 @@ function Find-MakeNsis {
         }
     }
 
-    throw "makensis.exe not found. Install NSIS 3.x or let GitHub Actions install it."
+        throw "makensis.exe не найден. Установите NSIS 3.x или используйте сборку через GitHub Actions."
 }
 
 function Download-File {
@@ -43,7 +43,7 @@ function Download-File {
     if ($Sha256.Length -gt 0) {
         $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Destination).Hash.ToLowerInvariant()
         if ($actual -ne $Sha256.ToLowerInvariant()) {
-            throw "SHA256 mismatch for $Destination. Expected $Sha256, got $actual."
+            throw "SHA256 не совпал для $Destination. Ожидалось $Sha256, получено $actual."
         }
     }
 }
@@ -66,7 +66,7 @@ $requiredBuildFiles = @(
 foreach ($file in $requiredBuildFiles) {
     $path = Join-Path $BuildDir "Release\$file"
     if (-not (Test-Path $path)) {
-        throw "Required build output is missing: $path"
+        throw "Не найден обязательный артефакт сборки: $path"
     }
 }
 
@@ -91,32 +91,32 @@ $ScriptPath = Join-Path $ProjectRoot 'installer\AntivirusGui.nsi'
     $ScriptPath
 
 if ($LASTEXITCODE -ne 0) {
-    throw "makensis failed with exit code $LASTEXITCODE."
+    throw "makensis завершился с кодом $LASTEXITCODE."
 }
 
 $readme = Join-Path $OutputDir 'README-INSTALLER.md'
 @"
-# Antivirus GUI installer
+# Инсталлер Antivirus GUI
 
-Run `AntivirusGuiSetup.exe` as Administrator.
+Запустите `AntivirusGuiSetup.exe` от имени администратора.
 
-The installer:
+Инсталлер:
 
-- installs Microsoft Visual C++ Runtime;
-- installs Windows App Runtime 2.0;
-- copies `AntivirusWinUi.exe`, `AntivirusService.exe`, docs, and demo scripts to `C:\Program Files\AntivirusGui`;
-- registers `AntivirusGuiService` for automatic start;
-- starts the service;
-- creates Start Menu shortcuts;
-- registers an uninstaller.
+- устанавливает Microsoft Visual C++ Runtime;
+- устанавливает Windows App Runtime 2.0;
+- копирует `AntivirusWinUi.exe`, `AntivirusService.exe`, `AntivirusCtl.exe`, `docx` и демо-скрипты в `C:\Program Files\AntivirusGui`;
+- регистрирует службу `AntivirusGuiService` для автоматического запуска;
+- запускает службу;
+- создаёт ярлыки в меню Пуск;
+- регистрирует uninstall.
 
-Demo credentials:
+Данные для демонстрации:
 
-- login: `demo`
-- password: `demo`
-- activation code: `DEMO-1234`
+- логин: `demo`
+- пароль: `demo`
+- код активации: `DEMO-1234`
 
-Use installed docs `docs\final-audit.md` and `docs\defense.md` for the 2.4, 2.5, extra points, and 2.6 checklist.
+Для защиты откройте установленную папку `docx`: там есть чеклист, сценарий демонстрации и ответы на вопросы преподавателя.
 "@ | Set-Content -Path $readme -Encoding UTF8
 
-Write-Host "Installer: $OutputExe"
+Write-Host "Инсталлер: $OutputExe"

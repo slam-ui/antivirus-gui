@@ -60,8 +60,8 @@ ScanResult ScanEngine::scan(std::istream& input, ObjectType objectType, const Av
         }
     }
 
-    // Keep the std::map prefix lookup as a fallback and as the red-black-tree
-    // requirement for task 2.4.
+    // Поиск через std::map оставлен как fallback и как выполнение требования 2.4
+    // про красно-чёрное дерево по префиксу сигнатуры.
     for (std::streamoff position = 0; position <= fileSize - 8; ++position) {
         std::array<std::uint8_t, 8> prefixBytes{};
         if (!readExactly(input, position, prefixBytes.data(), prefixBytes.size())) {

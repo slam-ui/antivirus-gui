@@ -53,6 +53,16 @@ interface AntivirusRpc
         wchar_t lastError[512];
     } AvDirectoryMonitorStatus;
 
+    typedef struct AvScanScheduleStatus {
+        long running;
+        long targetType;
+        wchar_t path[512];
+        unsigned long intervalSeconds;
+        wchar_t lastRunAt[64];
+        wchar_t lastDetails[2048];
+        wchar_t lastError[512];
+    } AvScanScheduleStatus;
+
     void AvPing([in] handle_t binding, [out] long* result);
     void AvRequestServiceStop([in] handle_t binding, [out] long* result);
     void AvGetServiceStatus([in] handle_t binding, [out] long* status);
@@ -69,4 +79,7 @@ interface AntivirusRpc
     void AvStartDirectoryMonitor([in] handle_t binding, [in, string] const wchar_t* path, [out] AvDirectoryMonitorStatus* status);
     void AvStopDirectoryMonitor([in] handle_t binding, [out] AvDirectoryMonitorStatus* status);
     void AvGetDirectoryMonitorStatus([in] handle_t binding, [out] AvDirectoryMonitorStatus* status);
+    void AvStartScanSchedule([in] handle_t binding, [in] long targetType, [in, string] const wchar_t* path, [in] unsigned long intervalSeconds, [out] AvScanScheduleStatus* status);
+    void AvStopScanSchedule([in] handle_t binding, [out] AvScanScheduleStatus* status);
+    void AvGetScanScheduleStatus([in] handle_t binding, [out] AvScanScheduleStatus* status);
 }

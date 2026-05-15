@@ -43,16 +43,16 @@ AvDatabaseLoadResult AvUpdateClient::fetchDatabase() const
     if (!std::filesystem::exists(serverDatabasePath(), errorCode)) {
         result.error = AvDatabaseLoadError::FileNotFound;
         result.mockUpdateServerUnavailable = true;
-        result.message = L"Mock update server unavailable";
+        result.message = L"Mock update server недоступен";
         return result;
     }
 
     const AvDatabaseStorage storage(serverDirectory_);
     result = storage.loadDatabaseFile(serverDatabasePath());
     if (result.loaded) {
-        result.message = L"Mock update server database loaded";
+        result.message = L"База mock update server загружена";
     } else if (result.message.empty()) {
-        result.message = L"Mock update server database is invalid";
+        result.message = L"База mock update server повреждена";
     }
 
     return result;
