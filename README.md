@@ -7,6 +7,8 @@ Educational Windows C++20 project for antivirus GUI coursework. The project is i
 - Task 2.1: GUI lifecycle foundation; the primary GUI is now WinUI.
 - Task 2.2: Windows service, session launch, and local RPC interaction.
 - Task 2.3: account login, activation, and license-gated features.
+- Task 2.4: antivirus database loading, file/folder/fixed-drive scanning, monitoring, and Aho-Corasick extra point.
+- Task 2.5: on-disk antivirus database storage, update/recovery, backup, corrupted records, and forced update for a bad manifest.
 - Extra points: CMake build, secure stop confirmation, and documented DACL hardening.
 - Task 2.6: Windows installer packaging.
 
@@ -34,10 +36,10 @@ The legacy Qt Widgets target is disabled by default. Build it only when needed w
 After building:
 
 ```powershell
-.\build\Release\AntivirusWinUi.exe
+.\build\Release\AntivirusWinUi.exe --allow-standalone-debug --show
 ```
 
-The WinUI GUI talks to the service through Windows RPC. Run the service first for real statuses, login, activation, scanning, monitoring, and service stop.
+The WinUI GUI talks to the service through Windows RPC. In the installed flow, run `AntivirusWinUi.exe` normally: it starts the service if needed, asks the service-owned hidden GUI window to show, and exits without creating a second tray icon.
 
 ## Run Service
 
@@ -61,7 +63,7 @@ The installer includes the app, service, RPC stop helper, demo docs/scripts, Mic
 Build it locally after a Release build:
 
 ```powershell
-.\installer\build-installer.ps1 -BuildDir build-local-winui-clean -OutputDir out\installer
+.\installer\build-installer.ps1 -BuildDir build-local-winui-ui -OutputDir out\installer
 ```
 
 Run the generated installer as Administrator:

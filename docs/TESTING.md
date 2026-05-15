@@ -47,7 +47,7 @@ cmake --build build --config Release
 ## Task 2.6 Manual Checks
 
 1. Build Release with `scripts/demo/build-release.ps1`.
-2. Build the installer with `installer/build-installer.ps1 -BuildDir build-local-extra-final -OutputDir out/installer`.
+2. Build the installer with `installer/build-installer.ps1 -BuildDir build-local-winui-ui -OutputDir out/installer` or with the Release directory produced by `scripts/demo/build-release.ps1`.
 3. Run PowerShell as Administrator.
 4. Install with `out/installer/AntivirusGuiSetup.exe`.
 5. Verify files are installed under `C:\Program Files\AntivirusGui`.

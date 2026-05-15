@@ -186,6 +186,12 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
     endif()
 
     add_executable(AntivirusWinUi WIN32
+        src/gui/ParentProcessCheck.cpp
+        src/gui/ParentProcessCheck.h
+        src/gui/ServiceClient.cpp
+        src/gui/ServiceClient.h
+        src/gui/SingleInstanceGuard.cpp
+        src/gui/SingleInstanceGuard.h
         src/winui/main.cpp
         src/winui/RpcClientWin.cpp
         src/winui/RpcClientWin.h
@@ -227,6 +233,8 @@ if(WIN32 AND ANTIVIRUS_BUILD_WINUI)
             DWriteCore
             WindowsApp
             RuntimeObject
+            Advapi32
+            Comctl32
             Comdlg32
             Credui
             Ole32

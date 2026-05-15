@@ -1,14 +1,14 @@
 # Финальный аудит перед сдачей
 
-Дата проверки: 2026-05-13.
+Дата проверки: 2026-05-15.
 
 ## Таблица готовности
 
 | # | Пункт | Статус | Файл реализации | Как проверить | Что сказать преподавателю |
 |---|---|---|---|---|---|
 | 1 | C++20 | Готово | `CMakeLists.txt` | `set(CMAKE_CXX_STANDARD 20)` и clean build | Проект собирается как C++20. |
-| 2 | CMake | Готово | `CMakeLists.txt` | `cmake -S . -B build-local-winui-clean` | Сборка полностью описана в CMake. |
-| 3 | WinUI GUI | Готово | `src/winui/main.cpp` | Запустить `AntivirusWinUi.exe` | Основной GUI перенесён на WinUI. |
+| 2 | CMake | Готово | `CMakeLists.txt` | `cmake -S . -B build-local-winui-ui` | Сборка полностью описана в CMake. |
+| 3 | WinUI GUI | Готово | `src/winui/main.cpp` | Запустить `AntivirusWinUi.exe --allow-standalone-debug --show` или установленный `AntivirusWinUi.exe` | Основной GUI перенесён на WinUI; обычный запуск открывает service-owned скрытое окно, debug-флаг нужен только для локальной проверки без службы. |
 | 4 | Windows Service | Готово | `src/service/ServiceMain.cpp` | `AntivirusService.exe --install` от администратора | Есть Windows Service с SCM install/uninstall. |
 | 5 | Windows RPC | Готово | `rpc/AntivirusRpc.idl`, `src/service/RpcServer.cpp` | Сборка MIDL stubs, вызовы из GUI | GUI и service общаются через локальный RPC `ncalrpc`. |
 | 6 | Авторизация | Готово | `src/service/AuthManager.cpp`, `src/winui/main.cpp` | Login `demo` / `demo` | Авторизация проходит через service RPC. |
@@ -41,7 +41,7 @@
 | 33 | Directory monitoring | Готово | `src/service/scan/DirectoryMonitor.*`, `src/winui/main.cpp` | WinUI start/stop monitoring | Service мониторит папку и сканирует изменённые файлы. |
 | 34 | Secure Desktop confirmation | Готово | `src/common/secure_stop_confirmation.cpp` | WinUI `Остановить службу` | Остановка требует Secure Desktop prompt. |
 | 35 | Process hardening | Готово | `src/common/process_hardening.cpp` | Логи service launch | Реализовано учебное DACL hardening без обхода безопасности Windows. |
-| 36 | Installer | Готово | `installer/AntivirusGui.nsi`, `installer/build-installer.ps1`, `src/tools/AntivirusCtl.cpp`, `.github/workflows/windows.yml` | GitHub artifact `antivirus-gui-installer` или `installer/build-installer.ps1` | Есть настоящий `AntivirusGuiSetup.exe`: останавливает старую службу через RPC helper, ставит зависимости, WinUI GUI, service, docs/scripts и uninstall. |
+| 36 | Installer | Готово | `installer/AntivirusGui.nsi`, `installer/build-installer.ps1`, `src/tools/AntivirusCtl.cpp`, `.github/workflows/windows.yml` | GitHub artifact `antivirus-gui-installer` или `installer/build-installer.ps1` | Есть настоящий `AntivirusGuiSetup.exe`: останавливает старую службу через RPC helper/taskkill, ставит зависимости, WinUI GUI, service, docs/scripts и uninstall. |
 | 37 | Demo scripts | Готово | `scripts/demo/*` | Запустить порядок из `scripts/demo/README.md` | Есть scripts для build, service, license, threats, recovery, logs. |
 | 38 | Документация защиты | Готово | `docs/defense.md` | Открыть документ | Есть структура, речь, demo order и пояснения. |
 | 39 | PR descriptions | Готово | `docs/pr-descriptions.md` | Открыть документ | Есть summary для основных веток/проходов. |
@@ -51,28 +51,28 @@
 
 ## Ограничения проверки
 
-- SCM install/start требует elevated PowerShell. В обычной оболочке проверены build, tests, WinUI smoke launch и `cmake --install`; фактический `Start-Service` нужно запускать от администратора.
+- SCM install/start требует elevated PowerShell. В обычной оболочке проверены build, tests, WinUI smoke launch, hidden/show-message behavior и сборка NSIS installer; фактический `Start-Service` нужно запускать от администратора.
 - Legacy Qt target сохранён, но не является основным. Основная сборка не требует `CMAKE_PREFIX_PATH` к Qt.
 
 ## Финальные команды демонстрации
 
 ```powershell
 npx --yes @microsoft/winappcli restore
-cmake -S . -B build-local-winui-clean -DCMAKE_BUILD_TYPE=Release
-cmake --build build-local-winui-clean --config Release
-ctest --test-dir build-local-winui-clean -C Release --output-on-failure
+cmake -S . -B build-local-winui-ui -DCMAKE_BUILD_TYPE=Release
+cmake --build build-local-winui-ui --config Release
+ctest --test-dir build-local-winui-ui -C Release --output-on-failure
 
 .\scripts\demo\build-release.ps1
 .\scripts\demo\prepare-license.ps1
 .\scripts\demo\install-service.ps1
 .\scripts\demo\create-test-threats.ps1
-.\build-local-extra-final\Release\AntivirusWinUi.exe
+.\build-local-winui-ui\Release\AntivirusWinUi.exe --allow-standalone-debug --show
 ```
 
 Команды для installer demo:
 
 ```powershell
-.\installer\build-installer.ps1 -BuildDir build-local-extra-final -OutputDir out\installer
+.\installer\build-installer.ps1 -BuildDir build-local-winui-ui -OutputDir out\installer
 .\out\installer\AntivirusGuiSetup.exe
 ```
 
@@ -86,7 +86,7 @@ ctest --test-dir build-local-winui-clean -C Release --output-on-failure
 
 База хранится на диске как `avdb.bin`, рядом есть `avdb.bak`. При повреждении primary базы service пробует mock update server, backup и default demo database. Повреждённый manifest обрабатывается отдельно и принудительно ведёт к mock-update recovery. Directory monitoring работает в service: GUI только выбирает папку и показывает статус.
 
-В финальной версии основной GUI — `AntivirusWinUi.exe`. Qt target оставлен как legacy, но отключён по умолчанию. Сборка `build-local-winui-clean` проходит без Qt `CMAKE_PREFIX_PATH`. Для 2.6 есть GitHub artifact `antivirus-gui-installer` с настоящим `AntivirusGuiSetup.exe`. Он ставит VC++ Runtime, Windows App Runtime 2.0, WinUI GUI, service, документацию и demo scripts, регистрирует службу и создаёт uninstall.
+В финальной версии основной GUI — `AntivirusWinUi.exe`. Qt target оставлен как legacy, но отключён по умолчанию. Сборка WinUI проходит без Qt `CMAKE_PREFIX_PATH`. Для 2.6 есть GitHub artifact `antivirus-gui-installer` с настоящим `AntivirusGuiSetup.exe`. Он ставит VC++ Runtime, Windows App Runtime 2.0, WinUI GUI, service, документацию и demo scripts, регистрирует службу и создаёт uninstall.
 
 ## Вероятные вопросы
 

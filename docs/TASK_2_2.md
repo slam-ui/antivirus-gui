@@ -4,16 +4,16 @@
 
 | Area | Requirement | Implementation |
 |------|-------------|----------------|
-| Service | Launch GUI in all non-zero terminal sessions as the session owner with hidden main window. | `SessionManager` enumerates WTS sessions and `ProcessLauncher` uses `WTSQueryUserToken`, `DuplicateTokenEx`, `CreateEnvironmentBlock`, and `CreateProcessAsUserW` with `--hidden --service-child`. |
+| Service | Launch GUI in all non-zero terminal sessions as the session owner with hidden main window. | `SessionManager` enumerates WTS sessions and `ProcessLauncher` uses `WTSQueryUserToken`, `DuplicateTokenEx`, `CreateEnvironmentBlock`, and `CreateProcessAsUserW` with `--service-child`; WinUI treats service-child startup as hidden by default. |
 | Service | Track new user logons and launch GUI. | `ServiceMain` handles `SERVICE_CONTROL_SESSIONCHANGE` for logon/console/remote connect events. |
 | Service | Keep controlled stop through RPC for coursework. | SCM stop/shutdown controls are not accepted while running; RPC stop sets the service stop event. |
 | Service | Start Windows RPC server using `ncalrpc`. | `RpcServer` registers endpoint `AntivirusGuiRpc` over `ncalrpc`. Modern local RPC on Windows uses LPC/ALPC internally for local transport. |
 | Service | Register RPC interface for stop requests. | `rpc/AntivirusRpc.idl` defines `AvPing`, `AvRequestServiceStop`, and `AvGetServiceStatus`; CMake runs MIDL and links generated server stubs. |
 | Service | Stop all launched GUI children on service stop. | `SessionManager::stopAllGuiChildren()` waits for owned children and terminates only owned GUI processes after timeout. |
 | GUI | Check Windows service state on startup. | `ServiceClient` queries SCM; if service is installed but stopped, GUI starts it, waits for `Running`, and exits. |
-| GUI | Verify parent process is this project service. | `ParentProcessCheck` checks the parent image name and production mode requires `AntivirusService.exe`; `--allow-standalone-debug` bypasses this only for debugging. |
-| GUI | `Файл -> Выход` stops service through RPC. | `AppLifecycle::quitApplication()` calls `RpcClient::requestServiceStop()`. |
-| GUI | Tray `Выход` stops service through RPC. | Tray action uses the same `AppLifecycle` path. |
+| GUI | Verify parent process is this project service. | `ParentProcessCheck` checks the parent image name and production GUI creation requires `AntivirusService.exe`; a normal double-click only asks the existing service-owned window to show and exits. |
+| GUI | `Файл -> Выход` stops service through RPC. | WinUI command handler calls `RpcClientWin::requestServiceStop()` after Secure Desktop confirmation. |
+| GUI | Tray `Выход` stops service through RPC. | Tray action uses the same Secure Desktop + RPC stop path. |
 | CMake | Build generated RPC stubs. | `CMakeLists.txt` compiles `rpc/AntivirusRpc.idl` with MIDL and links generated client/server stubs into GUI/service targets. |
 
 ## Commands
@@ -45,14 +45,22 @@ Run service logic in console for debugging:
 Run GUI in standalone debug mode:
 
 ```powershell
-.\AntivirusGui.exe --allow-standalone-debug
+.\AntivirusWinUi.exe --allow-standalone-debug --show
 ```
 
 Production GUI instances are launched by the service with:
 
 ```powershell
-.\AntivirusGui.exe --hidden --service-child
+.\AntivirusWinUi.exe --service-child
 ```
+
+Open the installed service-owned GUI from a normal shortcut or double-click:
+
+```powershell
+.\AntivirusWinUi.exe
+```
+
+This starts the service if needed, posts a show request to the service-owned hidden WinUI window, and exits without creating an untrusted GUI instance.
 
 ## Manual Verification
 

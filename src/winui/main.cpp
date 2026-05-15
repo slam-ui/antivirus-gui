@@ -1,10 +1,19 @@
+#include "common/logging.h"
+#include "common/process_hardening.h"
 #include "common/secure_stop_confirmation.h"
+#include "gui/ParentProcessCheck.h"
+#include "gui/ServiceClient.h"
+#include "gui/SingleInstanceGuard.h"
 #include "winui/RpcClientWin.h"
 
 #include <windows.h>
 #undef GetCurrentTime
 
+#include <algorithm>
 #include <commdlg.h>
+#include <commctrl.h>
+#include <microsoft.ui.xaml.window.h>
+#include <shellapi.h>
 #include <shlobj.h>
 
 #include <winrt/base.h>
@@ -12,8 +21,10 @@
 #include <MddBootstrap.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
@@ -24,23 +35,172 @@
 #include <winrt/Windows.UI.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
+#include <cwchar>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace controls = winrt::Microsoft::UI::Xaml::Controls;
 namespace dispatching = winrt::Microsoft::UI::Dispatching;
 namespace markup = winrt::Microsoft::UI::Xaml::Markup;
 namespace media = winrt::Microsoft::UI::Xaml::Media;
+namespace windowing = winrt::Microsoft::UI::Windowing;
 namespace xamltype = winrt::Microsoft::UI::Xaml::XamlTypeInfo;
 
 namespace {
+
+constexpr UINT kTrayMessage = WM_APP + 42;
+constexpr UINT kTrayIconId = 1;
+constexpr UINT kTrayOpenCommand = 1001;
+constexpr UINT kTrayExitCommand = 1002;
+constexpr UINT kShowMainWindowMessage = WM_APP + 43;
+constexpr wchar_t kMainWindowTitle[] = L"Антивирус GUI - WinUI";
+
+unsigned int iconPixel(unsigned char alpha, unsigned char red, unsigned char green, unsigned char blue)
+{
+    return (static_cast<unsigned int>(alpha) << 24)
+        | (static_cast<unsigned int>(red) << 16)
+        | (static_cast<unsigned int>(green) << 8)
+        | static_cast<unsigned int>(blue);
+}
+
+double distanceToSegment(double px, double py, double ax, double ay, double bx, double by)
+{
+    const double vx = bx - ax;
+    const double vy = by - ay;
+    const double wx = px - ax;
+    const double wy = py - ay;
+    const double lengthSquared = vx * vx + vy * vy;
+    if (lengthSquared <= 0.0) {
+        const double dx = px - ax;
+        const double dy = py - ay;
+        return std::sqrt(dx * dx + dy * dy);
+    }
+
+    const double t = std::clamp((wx * vx + wy * vy) / lengthSquared, 0.0, 1.0);
+    const double cx = ax + t * vx;
+    const double cy = ay + t * vy;
+    const double dx = px - cx;
+    const double dy = py - cy;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+bool isInIconBadge(double nx, double ny)
+{
+    const double dx = nx - 0.50;
+    const double dy = ny - 0.50;
+    return std::sqrt(dx * dx + dy * dy) <= 0.43;
+}
+
+bool isNearIconBadgeBorder(double nx, double ny)
+{
+    const double dx = nx - 0.50;
+    const double dy = ny - 0.50;
+    const double radius = std::sqrt(dx * dx + dy * dy);
+    return radius > 0.37 && radius <= 0.43;
+}
+
+HICON createAppIcon(int requestedSize)
+{
+    const int size = std::max(16, requestedSize);
+    std::vector<unsigned int> pixels(static_cast<size_t>(size) * static_cast<size_t>(size), 0);
+
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            const double nx = (static_cast<double>(x) + 0.5) / static_cast<double>(size);
+            const double ny = (static_cast<double>(y) + 0.5) / static_cast<double>(size);
+            if (!isInIconBadge(nx, ny)) {
+                continue;
+            }
+
+            const double shade = std::clamp((ny - 0.08) / 0.84, 0.0, 1.0);
+            unsigned char red = static_cast<unsigned char>(22 + shade * 2);
+            unsigned char green = static_cast<unsigned char>(163 - shade * 47);
+            unsigned char blue = static_cast<unsigned char>(74 - shade * 1);
+            if (isNearIconBadgeBorder(nx, ny)) {
+                red = 15;
+                green = 118;
+                blue = 73;
+            }
+
+            pixels[static_cast<size_t>(y) * static_cast<size_t>(size) + static_cast<size_t>(x)] =
+                iconPixel(255, red, green, blue);
+        }
+    }
+
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            const double nx = (static_cast<double>(x) + 0.5) / static_cast<double>(size);
+            const double ny = (static_cast<double>(y) + 0.5) / static_cast<double>(size);
+            const double checkDistance = std::min(
+                distanceToSegment(nx, ny, 0.30, 0.53, 0.45, 0.68),
+                distanceToSegment(nx, ny, 0.45, 0.68, 0.72, 0.37));
+            if (checkDistance < 0.050 && isInIconBadge(nx, ny)) {
+                pixels[static_cast<size_t>(y) * static_cast<size_t>(size) + static_cast<size_t>(x)] =
+                    iconPixel(255, 255, 255, 255);
+            } else if (checkDistance < 0.070 && isInIconBadge(nx, ny)) {
+                pixels[static_cast<size_t>(y) * static_cast<size_t>(size) + static_cast<size_t>(x)] =
+                    iconPixel(255, 220, 252, 231);
+            }
+        }
+    }
+
+    BITMAPV5HEADER bitmapHeader{};
+    bitmapHeader.bV5Size = sizeof(bitmapHeader);
+    bitmapHeader.bV5Width = size;
+    bitmapHeader.bV5Height = -size;
+    bitmapHeader.bV5Planes = 1;
+    bitmapHeader.bV5BitCount = 32;
+    bitmapHeader.bV5Compression = BI_BITFIELDS;
+    bitmapHeader.bV5RedMask = 0x00FF0000;
+    bitmapHeader.bV5GreenMask = 0x0000FF00;
+    bitmapHeader.bV5BlueMask = 0x000000FF;
+    bitmapHeader.bV5AlphaMask = 0xFF000000;
+
+    void* bits = nullptr;
+    HDC screenDc = GetDC(nullptr);
+    HBITMAP colorBitmap = CreateDIBSection(
+        screenDc,
+        reinterpret_cast<BITMAPINFO*>(&bitmapHeader),
+        DIB_RGB_COLORS,
+        &bits,
+        nullptr,
+        0);
+    ReleaseDC(nullptr, screenDc);
+
+    if (colorBitmap == nullptr || bits == nullptr) {
+        if (colorBitmap != nullptr) {
+            DeleteObject(colorBitmap);
+        }
+        return nullptr;
+    }
+
+    std::copy(pixels.begin(), pixels.end(), static_cast<unsigned int*>(bits));
+    HBITMAP maskBitmap = CreateBitmap(size, size, 1, 1, nullptr);
+    if (maskBitmap == nullptr) {
+        DeleteObject(colorBitmap);
+        return nullptr;
+    }
+
+    ICONINFO iconInfo{};
+    iconInfo.fIcon = TRUE;
+    iconInfo.hbmMask = maskBitmap;
+    iconInfo.hbmColor = colorBitmap;
+    HICON icon = CreateIconIndirect(&iconInfo);
+    DeleteObject(maskBitmap);
+    DeleteObject(colorBitmap);
+
+    return icon;
+}
 
 winrt::Windows::UI::Color color(unsigned char red, unsigned char green, unsigned char blue)
 {
@@ -87,28 +247,78 @@ controls::TextBlock makeStatusText(const wchar_t* text)
 {
     controls::TextBlock block = makeTextBlock(text, 14);
     block.Foreground(brush(51, 65, 85));
+    block.LineHeight(21);
     return block;
 }
 
-controls::Button makeButton(const wchar_t* text)
+controls::TextBlock makeSmallCaps(const wchar_t* text)
+{
+    controls::TextBlock block = makeTextBlock(text, 12);
+    block.Foreground(brush(100, 116, 139));
+    block.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    return block;
+}
+
+controls::FontIcon makeIcon(const wchar_t* glyph)
+{
+    controls::FontIcon icon;
+    icon.Glyph(glyph);
+    icon.FontFamily(media::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+    icon.FontSize(14);
+    return icon;
+}
+
+controls::Button makeButton(const wchar_t* text, const wchar_t* glyph = L"", bool primary = false, bool danger = false)
 {
     controls::Button button;
-    button.Content(winrt::box_value(winrt::hstring{text}));
-    button.MinHeight(34);
-    button.MinWidth(168);
-    button.Margin(mux::Thickness{0, 0, 8, 8});
+    button.MinHeight(38);
+    button.MinWidth(176);
+    button.Margin(mux::Thickness{0, 0, 10, 10});
+    button.Padding(mux::Thickness{14, 7, 14, 7});
+    button.CornerRadius(mux::CornerRadius{6});
+
+    controls::StackPanel content;
+    content.Orientation(controls::Orientation::Horizontal);
+    content.Spacing(8);
+    content.VerticalAlignment(mux::VerticalAlignment::Center);
+
+    if (std::wcslen(glyph) > 0) {
+        content.Children().Append(makeIcon(glyph));
+    }
+
+    controls::TextBlock label = makeTextBlock(text, 14);
+    label.TextWrapping(mux::TextWrapping::NoWrap);
+    content.Children().Append(label);
+    button.Content(content);
+
+    if (primary) {
+        button.Background(brush(37, 99, 235));
+        button.BorderBrush(brush(37, 99, 235));
+        button.Foreground(brush(255, 255, 255));
+    } else if (danger) {
+        button.Background(brush(254, 242, 242));
+        button.BorderBrush(brush(248, 113, 113));
+        button.Foreground(brush(153, 27, 27));
+    }
+
     return button;
 }
 
-controls::StackPanel makeCard(const wchar_t* title)
+controls::StackPanel makeCard(const wchar_t* title, const wchar_t* subtitle = L"")
 {
     controls::StackPanel content;
-    content.Spacing(8);
+    content.Spacing(10);
 
     controls::TextBlock header = makeTextBlock(title, 16);
     header.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     header.Foreground(brush(15, 23, 42));
     content.Children().Append(header);
+
+    if (std::wcslen(subtitle) > 0) {
+        controls::TextBlock hint = makeStatusText(subtitle);
+        hint.Foreground(brush(71, 85, 105));
+        content.Children().Append(hint);
+    }
 
     return content;
 }
@@ -120,9 +330,44 @@ controls::Border wrapCard(controls::StackPanel const& content)
     border.BorderBrush(brush(226, 232, 240));
     border.BorderThickness(mux::Thickness{1});
     border.CornerRadius(mux::CornerRadius{8});
-    border.Padding(mux::Thickness{16});
+    border.Padding(mux::Thickness{18});
     border.Child(content);
     return border;
+}
+
+controls::Border makePill(const wchar_t* text, media::SolidColorBrush const& background, media::SolidColorBrush const& foreground)
+{
+    controls::TextBlock label = makeTextBlock(text, 12);
+    label.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    label.Foreground(foreground);
+    label.TextWrapping(mux::TextWrapping::NoWrap);
+
+    controls::Border pill;
+    pill.Background(background);
+    pill.CornerRadius(mux::CornerRadius{999});
+    pill.Padding(mux::Thickness{10, 4, 10, 4});
+    pill.Child(label);
+    return pill;
+}
+
+controls::ColumnDefinition makeColumn(mux::GridLength const& width)
+{
+    controls::ColumnDefinition column;
+    column.Width(width);
+    return column;
+}
+
+controls::RowDefinition makeRow(mux::GridLength const& height)
+{
+    controls::RowDefinition row;
+    row.Height(height);
+    return row;
+}
+
+void setGridPosition(mux::FrameworkElement const& element, int row, int column)
+{
+    controls::Grid::SetRow(element, row);
+    controls::Grid::SetColumn(element, column);
 }
 
 std::wstring valueOrDash(const std::wstring& value)
@@ -286,7 +531,78 @@ std::optional<std::wstring> pickFolder(const wchar_t* title)
     return std::wstring(path);
 }
 
+bool hasArgument(std::wstring_view expected)
+{
+    int argc = 0;
+    PWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr) {
+        return false;
+    }
+
+    bool found = false;
+    for (int i = 1; i < argc; ++i) {
+        if (expected == argv[i]) {
+            found = true;
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    return found;
+}
+
+struct WindowSearch {
+    HWND hwnd = nullptr;
+};
+
+BOOL CALLBACK findMainWindowProc(HWND hwnd, LPARAM lParam)
+{
+    wchar_t title[128]{};
+    if (GetWindowTextW(hwnd, title, static_cast<int>(sizeof(title) / sizeof(title[0]))) <= 0) {
+        return TRUE;
+    }
+
+    if (std::wstring_view{title} != kMainWindowTitle) {
+        return TRUE;
+    }
+
+    auto* search = reinterpret_cast<WindowSearch*>(lParam);
+    search->hwnd = hwnd;
+    return FALSE;
+}
+
+std::optional<HWND> findExistingMainWindow()
+{
+    WindowSearch search{};
+    EnumWindows(&findMainWindowProc, reinterpret_cast<LPARAM>(&search));
+    if (search.hwnd == nullptr) {
+        return std::nullopt;
+    }
+
+    return search.hwnd;
+}
+
+bool requestExistingGuiToShow(DWORD timeoutMilliseconds)
+{
+    const DWORD startedAt = GetTickCount();
+    do {
+        if (const std::optional<HWND> hwnd = findExistingMainWindow(); hwnd.has_value()) {
+            PostMessageW(*hwnd, kShowMainWindowMessage, 0, 0);
+            return true;
+        }
+
+        Sleep(250);
+    } while (GetTickCount() - startedAt < timeoutMilliseconds);
+
+    return false;
+}
+
 struct WinUiApp : mux::ApplicationT<WinUiApp, markup::IXamlMetadataProvider> {
+    explicit WinUiApp(bool startHidden)
+        : startHidden_(startHidden)
+    {
+    }
+
     void OnLaunched(mux::LaunchActivatedEventArgs const&)
     {
         buildUi();
@@ -319,7 +635,8 @@ private:
     void buildUi()
     {
         window_ = mux::Window();
-        window_.Title(L"Антивирус GUI - WinUI");
+        window_.Title(kMainWindowTitle);
+        window_.AppWindow().Resize(winrt::Windows::Graphics::SizeInt32{1120, 760});
 
         controls::ScrollViewer scrollViewer;
         scrollViewer.HorizontalScrollBarVisibility(controls::ScrollBarVisibility::Disabled);
@@ -327,23 +644,56 @@ private:
         scrollViewer.Background(brush(248, 250, 252));
 
         controls::StackPanel root;
-        root.Padding(mux::Thickness{24});
-        root.Spacing(14);
+        root.Padding(mux::Thickness{24, 18, 24, 24});
+        root.Spacing(16);
         root.Background(brush(248, 250, 252));
+        root.MaxWidth(1180);
+        root.HorizontalAlignment(mux::HorizontalAlignment::Center);
+
+        controls::Grid header;
+        header.ColumnSpacing(18);
+        header.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(1, mux::GridUnitType::Star)));
+        header.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::Auto()));
+
+        controls::StackPanel titleBlock;
+        titleBlock.Spacing(4);
 
         controls::TextBlock title = makeTextBlock(L"Антивирус GUI", 28);
         title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         title.Foreground(brush(15, 23, 42));
-        root.Children().Append(title);
+        titleBlock.Children().Append(title);
 
-        controls::TextBlock subtitle = makeTextBlock(L"Учебный C++20 / WinUI интерфейс для службы, RPC, лицензии и сканирования.", 14);
+        controls::TextBlock subtitle = makeTextBlock(L"Рабочая панель службы, лицензии, сканирования и мониторинга", 14);
         subtitle.Foreground(brush(71, 85, 105));
-        root.Children().Append(subtitle);
+        titleBlock.Children().Append(subtitle);
+
+        header.Children().Append(titleBlock);
+
+        controls::StackPanel badges;
+        badges.Orientation(controls::Orientation::Horizontal);
+        badges.Spacing(8);
+        badges.VerticalAlignment(mux::VerticalAlignment::Center);
+        badges.Children().Append(makePill(L"2.1-2.6", brush(219, 234, 254), brush(30, 64, 175)));
+        badges.Children().Append(makePill(L"WinUI", brush(220, 252, 231), brush(22, 101, 52)));
+        setGridPosition(badges, 0, 1);
+        header.Children().Append(badges);
+        root.Children().Append(header);
+
+        controls::Grid contentGrid;
+        contentGrid.ColumnSpacing(16);
+        contentGrid.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(2.1, mux::GridUnitType::Star)));
+        contentGrid.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(1.0, mux::GridUnitType::Star)));
+
+        controls::StackPanel leftColumn;
+        leftColumn.Spacing(14);
+
+        controls::StackPanel rightColumn;
+        rightColumn.Spacing(14);
 
         controls::StackPanel serviceCard = makeCard(L"Статус службы");
         serviceLabel_ = makeStatusText(L"Служба: проверка...");
         serviceCard.Children().Append(serviceLabel_);
-        root.Children().Append(wrapCard(serviceCard));
+        rightColumn.Children().Append(wrapCard(serviceCard));
 
         controls::StackPanel accountCard = makeCard(L"Аккаунт и лицензия");
         accountLabel_ = makeStatusText(L"Аккаунт: не проверен");
@@ -356,26 +706,38 @@ private:
         loginBox_ = controls::TextBox();
         loginBox_.Header(winrt::box_value(winrt::hstring{L"Логин"}));
         loginBox_.PlaceholderText(L"demo");
-        loginBox_.MaxWidth(360);
-        loginBox_.HorizontalAlignment(mux::HorizontalAlignment::Left);
+        loginBox_.MinWidth(180);
+        loginBox_.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
 
         passwordBox_ = controls::PasswordBox();
         passwordBox_.Header(winrt::box_value(winrt::hstring{L"Пароль"}));
         passwordBox_.PlaceholderText(L"demo");
-        passwordBox_.MaxWidth(360);
-        passwordBox_.HorizontalAlignment(mux::HorizontalAlignment::Left);
+        passwordBox_.MinWidth(180);
+        passwordBox_.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
 
         activationBox_ = controls::TextBox();
         activationBox_.Header(winrt::box_value(winrt::hstring{L"Код активации"}));
         activationBox_.PlaceholderText(L"DEMO-1234");
-        activationBox_.MaxWidth(360);
-        activationBox_.HorizontalAlignment(mux::HorizontalAlignment::Left);
+        activationBox_.MinWidth(180);
+        activationBox_.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
+
+        controls::Grid accountFields;
+        accountFields.ColumnSpacing(12);
+        accountFields.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(1, mux::GridUnitType::Star)));
+        accountFields.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(1, mux::GridUnitType::Star)));
+        accountFields.ColumnDefinitions().Append(makeColumn(mux::GridLengthHelper::FromValueAndType(1, mux::GridUnitType::Star)));
+        setGridPosition(loginBox_, 0, 0);
+        setGridPosition(passwordBox_, 0, 1);
+        setGridPosition(activationBox_, 0, 2);
+        accountFields.Children().Append(loginBox_);
+        accountFields.Children().Append(passwordBox_);
+        accountFields.Children().Append(activationBox_);
 
         controls::StackPanel accountButtons;
         accountButtons.Orientation(controls::Orientation::Horizontal);
-        accountButtons.Children().Append(loginButton_ = makeButton(L"Войти"));
-        accountButtons.Children().Append(logoutButton_ = makeButton(L"Выйти"));
-        accountButtons.Children().Append(activateButton_ = makeButton(L"Активировать лицензию"));
+        accountButtons.Children().Append(loginButton_ = makeButton(L"Войти", L"\xE8B7", true));
+        accountButtons.Children().Append(logoutButton_ = makeButton(L"Выйти", L"\xE8BB"));
+        accountButtons.Children().Append(activateButton_ = makeButton(L"Активировать", L"\xE72E"));
 
         loginButton_.Click([this](auto&&, auto&&) {
             login();
@@ -387,26 +749,24 @@ private:
             activateLicense();
         });
 
-        accountCard.Children().Append(loginBox_);
-        accountCard.Children().Append(passwordBox_);
-        accountCard.Children().Append(activationBox_);
+        accountCard.Children().Append(accountFields);
         accountCard.Children().Append(accountButtons);
-        root.Children().Append(wrapCard(accountCard));
+        leftColumn.Children().Append(wrapCard(accountCard));
 
         controls::StackPanel databaseCard = makeCard(L"Антивирусные базы");
         databaseLabel_ = makeStatusText(L"Базы: не проверены");
         databaseCard.Children().Append(databaseLabel_);
-        root.Children().Append(wrapCard(databaseCard));
+        rightColumn.Children().Append(wrapCard(databaseCard));
 
         controls::StackPanel scanCard = makeCard(L"Сканирование");
-        controls::TextBlock scanHint = makeStatusText(L"Сканирование выполняется через RPC в службе. Если лицензия не активна, кнопки недоступны.");
+        controls::TextBlock scanHint = makeSmallCaps(L"Доступно после входа и активации");
         scanCard.Children().Append(scanHint);
 
         controls::StackPanel scanButtons;
         scanButtons.Orientation(controls::Orientation::Horizontal);
-        scanButtons.Children().Append(scanFileButton_ = makeButton(L"Сканировать файл"));
-        scanButtons.Children().Append(scanDirectoryButton_ = makeButton(L"Сканировать папку"));
-        scanButtons.Children().Append(scanFixedDrivesButton_ = makeButton(L"Сканировать все несъёмные диски"));
+        scanButtons.Children().Append(scanFileButton_ = makeButton(L"Файл", L"\xE8A5", true));
+        scanButtons.Children().Append(scanDirectoryButton_ = makeButton(L"Папка", L"\xE8B7"));
+        scanButtons.Children().Append(scanFixedDrivesButton_ = makeButton(L"Все диски", L"\xEDA2"));
         scanCard.Children().Append(scanButtons);
 
         scanFileButton_.Click([this](auto&&, auto&&) {
@@ -418,7 +778,7 @@ private:
         scanFixedDrivesButton_.Click([this](auto&&, auto&&) {
             scanFixedDrives();
         });
-        root.Children().Append(wrapCard(scanCard));
+        leftColumn.Children().Append(wrapCard(scanCard));
 
         controls::StackPanel monitorCard = makeCard(L"Мониторинг");
         monitorLabel_ = makeStatusText(L"Мониторинг: не проверен");
@@ -426,8 +786,8 @@ private:
 
         controls::StackPanel monitorButtons;
         monitorButtons.Orientation(controls::Orientation::Horizontal);
-        monitorButtons.Children().Append(startMonitorButton_ = makeButton(L"Запустить мониторинг папки"));
-        monitorButtons.Children().Append(stopMonitorButton_ = makeButton(L"Остановить мониторинг"));
+        monitorButtons.Children().Append(startMonitorButton_ = makeButton(L"Запустить", L"\xE768", true));
+        monitorButtons.Children().Append(stopMonitorButton_ = makeButton(L"Остановить", L"\xE71A"));
         monitorCard.Children().Append(monitorButtons);
 
         startMonitorButton_.Click([this](auto&&, auto&&) {
@@ -436,32 +796,302 @@ private:
         stopMonitorButton_.Click([this](auto&&, auto&&) {
             stopMonitoring();
         });
-        root.Children().Append(wrapCard(monitorCard));
+        leftColumn.Children().Append(wrapCard(monitorCard));
 
         controls::StackPanel serviceActionsCard = makeCard(L"Управление службой");
-        controls::TextBlock stopHint = makeStatusText(L"Остановка службы требует подтверждения в защищённом окне Windows.");
+        controls::TextBlock stopHint = makeSmallCaps(L"Остановка с подтверждением Secure Desktop");
         serviceActionsCard.Children().Append(stopHint);
-        serviceActionsCard.Children().Append(stopServiceButton_ = makeButton(L"Остановить службу"));
+        serviceActionsCard.Children().Append(stopServiceButton_ = makeButton(L"Остановить службу", L"\xE71A", false, true));
         stopServiceButton_.Click([this](auto&&, auto&&) {
             stopService();
         });
-        root.Children().Append(wrapCard(serviceActionsCard));
+        rightColumn.Children().Append(wrapCard(serviceActionsCard));
+
+        controls::StackPanel trayCard = makeCard(L"Фоновый режим");
+        controls::TextBlock trayHint = makeStatusText(L"Закрытие окна скрывает приложение в трей.");
+        trayCard.Children().Append(trayHint);
+        trayCard.Children().Append(hideToTrayButton_ = makeButton(L"Скрыть в трей", L"\xE73F"));
+        hideToTrayButton_.Click([this](auto&&, auto&&) {
+            hideMainWindow();
+        });
+        rightColumn.Children().Append(wrapCard(trayCard));
+
+        setGridPosition(leftColumn, 0, 0);
+        setGridPosition(rightColumn, 0, 1);
+        contentGrid.Children().Append(leftColumn);
+        contentGrid.Children().Append(rightColumn);
+        root.Children().Append(contentGrid);
 
         controls::StackPanel resultCard = makeCard(L"Результат и журнал последней операции");
         busyLabel_ = makeStatusText(L"Последняя операция: ожидание действия");
         resultBox_ = controls::TextBox();
-        resultBox_.PlaceholderText(L"Здесь будут отображаться результаты сканирования, мониторинга, входа и активации.");
+        resultBox_.PlaceholderText(L"Журнал операций появится здесь.");
         resultBox_.AcceptsReturn(true);
         resultBox_.IsReadOnly(true);
         resultBox_.TextWrapping(mux::TextWrapping::Wrap);
-        resultBox_.MinHeight(240);
+        resultBox_.MinHeight(190);
         resultCard.Children().Append(busyLabel_);
         resultCard.Children().Append(resultBox_);
         root.Children().Append(wrapCard(resultCard));
 
         scrollViewer.Content(root);
         window_.Content(scrollViewer);
+        setupWindowInterop();
+        if (startHidden_) {
+            hideMainWindow();
+        } else {
+            showMainWindow();
+        }
+    }
+
+    void setupWindowInterop()
+    {
+        auto nativeWindow = window_.as<IWindowNative>();
+        winrt::check_hresult(nativeWindow->get_WindowHandle(&windowHandle_));
+        taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
+
+        SetWindowSubclass(windowHandle_, &WinUiApp::windowProc, 1, reinterpret_cast<DWORD_PTR>(this));
+        applyWindowIcons();
+
+        trayMenu_ = CreatePopupMenu();
+        AppendMenuW(trayMenu_, MF_STRING, kTrayOpenCommand, L"Открыть");
+        AppendMenuW(trayMenu_, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(trayMenu_, MF_STRING, kTrayExitCommand, L"Выход");
+
+        mainMenu_ = CreateMenu();
+        HMENU fileMenu = CreatePopupMenu();
+        AppendMenuW(fileMenu, MF_STRING, kTrayExitCommand, L"Выход");
+        AppendMenuW(mainMenu_, MF_POPUP, reinterpret_cast<UINT_PTR>(fileMenu), L"Файл");
+        SetMenu(windowHandle_, mainMenu_);
+
+        window_.Closed([this](auto&&, mux::WindowEventArgs const& args) {
+            if (!exiting_) {
+                args.Handled(true);
+                hideMainWindow();
+                return;
+            }
+
+            cleanupNativeResources();
+        });
+
+        addTrayIcon();
+    }
+
+    void applyWindowIcons()
+    {
+        if (windowHandle_ == nullptr) {
+            return;
+        }
+
+        if (largeWindowIcon_ == nullptr) {
+            largeWindowIcon_ = createAppIcon(GetSystemMetrics(SM_CXICON));
+        }
+        if (smallWindowIcon_ == nullptr) {
+            smallWindowIcon_ = createAppIcon(GetSystemMetrics(SM_CXSMICON));
+        }
+
+        if (largeWindowIcon_ != nullptr) {
+            SendMessageW(windowHandle_, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(largeWindowIcon_));
+        }
+        if (smallWindowIcon_ != nullptr) {
+            SendMessageW(windowHandle_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(smallWindowIcon_));
+        }
+    }
+
+    void cleanupNativeResources()
+    {
+        removeTrayIcon();
+
+        if (windowHandle_ != nullptr) {
+            RemoveWindowSubclass(windowHandle_, &WinUiApp::windowProc, 1);
+        }
+
+        if (trayMenu_ != nullptr) {
+            DestroyMenu(trayMenu_);
+            trayMenu_ = nullptr;
+        }
+
+        if (mainMenu_ != nullptr) {
+            if (windowHandle_ != nullptr) {
+                SetMenu(windowHandle_, nullptr);
+            }
+            DestroyMenu(mainMenu_);
+            mainMenu_ = nullptr;
+        }
+
+        if (smallWindowIcon_ != nullptr) {
+            DestroyIcon(smallWindowIcon_);
+            smallWindowIcon_ = nullptr;
+        }
+
+        if (largeWindowIcon_ != nullptr) {
+            DestroyIcon(largeWindowIcon_);
+            largeWindowIcon_ = nullptr;
+        }
+    }
+
+    static LRESULT CALLBACK windowProc(
+        HWND hwnd,
+        UINT message,
+        WPARAM wParam,
+        LPARAM lParam,
+        UINT_PTR,
+        DWORD_PTR refData
+    )
+    {
+        auto* app = reinterpret_cast<WinUiApp*>(refData);
+        if (app != nullptr) {
+            if (message == app->taskbarCreatedMessage_) {
+                app->trayIconAdded_ = false;
+                app->addTrayIcon();
+                return 0;
+            }
+
+            if (message == kShowMainWindowMessage) {
+                app->showMainWindow();
+                return 0;
+            }
+
+            if (message == kTrayMessage) {
+                app->handleTrayMessage(static_cast<UINT>(LOWORD(lParam)));
+                return 0;
+            }
+
+            if (message == WM_COMMAND && LOWORD(wParam) == kTrayExitCommand) {
+                app->requestStopAndExit();
+                return 0;
+            }
+        }
+
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+
+    void addTrayIcon()
+    {
+        if (windowHandle_ == nullptr) {
+            return;
+        }
+
+        NOTIFYICONDATAW data{};
+        data.cbSize = sizeof(data);
+        data.hWnd = windowHandle_;
+        data.uID = kTrayIconId;
+        data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        data.uCallbackMessage = kTrayMessage;
+        data.hIcon = smallWindowIcon_ != nullptr ? smallWindowIcon_ : LoadIconW(nullptr, IDI_APPLICATION);
+        wcscpy_s(data.szTip, L"Antivirus GUI Coursework");
+
+        if (trayIconAdded_) {
+            Shell_NotifyIconW(NIM_MODIFY, &data);
+            return;
+        }
+
+        if (Shell_NotifyIconW(NIM_ADD, &data)) {
+            data.uVersion = NOTIFYICON_VERSION_4;
+            Shell_NotifyIconW(NIM_SETVERSION, &data);
+            trayIconAdded_ = true;
+        }
+    }
+
+    void removeTrayIcon()
+    {
+        if (!trayIconAdded_ || windowHandle_ == nullptr) {
+            return;
+        }
+
+        NOTIFYICONDATAW data{};
+        data.cbSize = sizeof(data);
+        data.hWnd = windowHandle_;
+        data.uID = kTrayIconId;
+        Shell_NotifyIconW(NIM_DELETE, &data);
+        trayIconAdded_ = false;
+    }
+
+    void handleTrayMessage(UINT message)
+    {
+        switch (message) {
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case NIN_SELECT:
+        case NIN_KEYSELECT:
+            showMainWindow();
+            break;
+        case WM_RBUTTONUP:
+        case WM_CONTEXTMENU:
+            showTrayMenu();
+            break;
+        default:
+            break;
+        }
+    }
+
+    void showTrayMenu()
+    {
+        if (trayMenu_ == nullptr || windowHandle_ == nullptr) {
+            return;
+        }
+
+        POINT point{};
+        GetCursorPos(&point);
+        SetForegroundWindow(windowHandle_);
+
+        const UINT command = TrackPopupMenu(
+            trayMenu_,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
+            point.x,
+            point.y,
+            0,
+            windowHandle_,
+            nullptr
+        );
+
+        if (command == kTrayOpenCommand) {
+            showMainWindow();
+        } else if (command == kTrayExitCommand) {
+            requestStopAndExit();
+        }
+
+        PostMessageW(windowHandle_, WM_NULL, 0, 0);
+    }
+
+    void showMainWindow()
+    {
+        window_.AppWindow().Show(true);
         window_.Activate();
+        windowVisible_ = true;
+    }
+
+    void hideMainWindow()
+    {
+        window_.AppWindow().Hide();
+        windowVisible_ = false;
+    }
+
+    bool requestServiceStopWithConfirmation()
+    {
+        if (!antivirus::common::confirmServiceStopOnSecureDesktop()) {
+            resultBox_.Text(L"Остановка службы отменена пользователем.");
+            busyLabel_.Text(L"Последняя операция отменена");
+            return false;
+        }
+
+        const bool requested = rpcClient_.requestServiceStop();
+        resultBox_.Text(requested
+            ? L"Запрос на остановку службы отправлен."
+            : L"Не удалось отправить запрос на остановку службы через RPC.");
+        busyLabel_.Text(L"Последняя операция выполнена");
+        return requested;
+    }
+
+    void requestStopAndExit()
+    {
+        if (!requestServiceStopWithConfirmation()) {
+            showMainWindow();
+            return;
+        }
+
+        exiting_ = true;
+        window_.Close();
     }
 
     void refreshState()
@@ -502,6 +1132,7 @@ private:
         startMonitorButton_.IsEnabled(canUseFeature);
         stopMonitorButton_.IsEnabled(canUseFeature && monitorRunning);
         stopServiceButton_.IsEnabled(canCallRpc);
+        hideToTrayButton_.IsEnabled(!busy_.load());
     }
 
     void setAllButtonsEnabled(bool enabled)
@@ -515,6 +1146,7 @@ private:
         startMonitorButton_.IsEnabled(enabled);
         stopMonitorButton_.IsEnabled(enabled);
         stopServiceButton_.IsEnabled(enabled);
+        hideToTrayButton_.IsEnabled(enabled);
     }
 
     void runBackground(const std::wstring& progressText, std::function<std::wstring()> operation)
@@ -654,21 +1286,22 @@ private:
 
     void stopService()
     {
-        if (!antivirus::common::confirmServiceStopOnSecureDesktop()) {
-            resultBox_.Text(L"Остановка службы отменена пользователем.");
-            busyLabel_.Text(L"Последняя операция отменена");
-            return;
-        }
-
-        runBackground(L"Отправляется запрос на остановку службы...", [this]() {
-            return rpcClient_.requestServiceStop()
-                ? L"Запрос на остановку службы отправлен."
-                : L"Не удалось отправить запрос на остановку службы через RPC.";
-        });
+        requestServiceStopWithConfirmation();
     }
 
     antivirus::winui::RpcClientWin rpcClient_;
     std::atomic_bool busy_{false};
+
+    bool startHidden_ = false;
+    bool exiting_ = false;
+    bool windowVisible_ = false;
+    bool trayIconAdded_ = false;
+    UINT taskbarCreatedMessage_ = 0;
+    HWND windowHandle_ = nullptr;
+    HMENU trayMenu_ = nullptr;
+    HMENU mainMenu_ = nullptr;
+    HICON smallWindowIcon_ = nullptr;
+    HICON largeWindowIcon_ = nullptr;
 
     mux::Window window_{nullptr};
     mux::DispatcherTimer pollingTimer_{nullptr};
@@ -695,6 +1328,7 @@ private:
     controls::Button startMonitorButton_{nullptr};
     controls::Button stopMonitorButton_{nullptr};
     controls::Button stopServiceButton_{nullptr};
+    controls::Button hideToTrayButton_{nullptr};
 
     xamltype::XamlControlsXamlMetaDataProvider xamlProvider_;
 };
@@ -704,12 +1338,64 @@ private:
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     try {
+        const bool allowStandaloneDebug = hasArgument(L"--allow-standalone-debug");
+        const bool serviceChild = hasArgument(L"--service-child");
+        const bool forceShow = hasArgument(L"--show");
+        const bool startHidden = !forceShow && (serviceChild || hasArgument(L"--hidden"));
+
+        if (!allowStandaloneDebug) {
+            antivirus::gui::ServiceClient serviceClient;
+            if (!serviceClient.isRunning()) {
+                if (!serviceClient.isInstalled()) {
+                    antivirus::common::log_error(L"AntivirusGuiService is not installed");
+                    return 1;
+                }
+
+                antivirus::common::log_info(L"Service is not running; attempting to start it and exit");
+                if (!serviceClient.startService() || !serviceClient.waitUntilRunning(15000)) {
+                    antivirus::common::log_error(L"Unable to start AntivirusGuiService");
+                    return 1;
+                }
+
+                if (!serviceChild) {
+                    if (!requestExistingGuiToShow(7000)) {
+                        antivirus::common::log_warning(L"Service started, but no service-owned WinUI window was found to show");
+                    }
+                    return 0;
+                }
+            }
+
+            if (!serviceChild) {
+                if (!requestExistingGuiToShow(3000)) {
+                    antivirus::common::log_warning(L"No service-owned WinUI window found to show");
+                }
+                return 0;
+            }
+
+            if (!antivirus::gui::isParentProjectService()) {
+                antivirus::common::log_error(L"GUI must be launched by AntivirusService.exe in production mode");
+                return 1;
+            }
+        }
+
+        std::unique_ptr<antivirus::gui::SingleInstanceGuard> singleInstance;
+        if (!allowStandaloneDebug) {
+            singleInstance = std::make_unique<antivirus::gui::SingleInstanceGuard>();
+            if (!singleInstance->isPrimaryInstance()) {
+                antivirus::common::log_info(L"Second WinUI GUI instance exits before creating tray icon");
+                return 0;
+            }
+        }
+
+        if (!allowStandaloneDebug) {
+            antivirus::common::hardenCurrentProcessForDemo(L"AntivirusWinUi.exe", true);
+        }
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         const auto bootstrap = Microsoft::Windows::ApplicationModel::DynamicDependency::Bootstrap::Initialize();
 
-        mux::Application::Start([](auto&&) {
+        mux::Application::Start([startHidden](auto&&) {
             static winrt::com_ptr<WinUiApp> app;
-            app = winrt::make_self<WinUiApp>();
+            app = winrt::make_self<WinUiApp>(startHidden);
         });
     } catch (const winrt::hresult_error& error) {
         showStartupError(
