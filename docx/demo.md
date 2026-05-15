@@ -2,6 +2,8 @@
 
 ## 1. Установка
 
+Готовый набор команд PowerShell есть в `docx\powershell-commands.md`.
+
 1. Открыть PowerShell или Explorer от администратора.
 2. Запустить `AntivirusGuiSetup.exe`.
 3. После установки открыть `C:\Program Files\AntivirusGui`.
@@ -95,4 +97,3 @@ C:\Program Files\AntivirusGui\Uninstall.exe
 ```
 
 3. Проверить, что служба и файлы удалены.
-
