@@ -112,9 +112,8 @@ void AvPing(handle_t, long* result)
 
 void AvRequestServiceStop(handle_t, long* result)
 {
-    antivirus::service::requestServiceStopFromRpc();
     if (result != nullptr) {
-        *result = 1;
+        *result = antivirus::service::requestServiceStopFromRpc() ? 1 : 0;
     }
 }
 
