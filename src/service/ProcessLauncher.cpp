@@ -2,6 +2,7 @@
 
 #include "common/app_paths.h"
 #include "common/logging.h"
+#include "common/process_hardening.h"
 #include "common/win_error.h"
 
 #include <userenv.h>
@@ -14,7 +15,8 @@
 
 namespace {
 
-std::wstring widenUtf8(std::string_view value) {
+std::wstring widenUtf8(std::string_view value)
+{
     if (value.empty()) {
         return {};
     }
@@ -50,7 +52,8 @@ std::wstring widenUtf8(std::string_view value) {
     return result;
 }
 
-std::wstring windowsErrorMessage(DWORD errorCode) {
+std::wstring windowsErrorMessage(DWORD errorCode)
+{
     const std::string narrow = antivirus::common::format_windows_error(errorCode);
     std::wstring wide = widenUtf8(narrow);
 
@@ -61,7 +64,8 @@ std::wstring windowsErrorMessage(DWORD errorCode) {
     return wide;
 }
 
-void logWinApiFailure(std::wstring_view operation, DWORD errorCode) {
+void logWinApiFailure(std::wstring_view operation, DWORD errorCode)
+{
     antivirus::common::log_warning(
         std::wstring(operation) + L": " + windowsErrorMessage(errorCode)
     );
@@ -70,10 +74,12 @@ void logWinApiFailure(std::wstring_view operation, DWORD errorCode) {
 class Handle final {
 public:
     explicit Handle(HANDLE handle = nullptr) noexcept
-        : handle_(handle) {
+        : handle_(handle)
+    {
     }
 
-    ~Handle() {
+    ~Handle()
+    {
         reset();
     }
 
@@ -81,31 +87,37 @@ public:
     Handle& operator=(const Handle&) = delete;
 
     Handle(Handle&& other) noexcept
-        : handle_(other.release()) {
+        : handle_(other.release())
+    {
     }
 
-    Handle& operator=(Handle&& other) noexcept {
+    Handle& operator=(Handle&& other) noexcept
+    {
         if (this != &other) {
             reset(other.release());
         }
         return *this;
     }
 
-    [[nodiscard]] HANDLE get() const noexcept {
+    [[nodiscard]] HANDLE get() const noexcept
+    {
         return handle_;
     }
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] bool valid() const noexcept
+    {
         return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
     }
 
-    HANDLE release() noexcept {
+    HANDLE release() noexcept
+    {
         HANDLE handle = handle_;
         handle_ = nullptr;
         return handle;
     }
 
-    void reset(HANDLE handle = nullptr) noexcept {
+    void reset(HANDLE handle = nullptr) noexcept
+    {
         if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
             CloseHandle(handle_);
         }
@@ -120,23 +132,27 @@ class EnvironmentBlock final {
 public:
     EnvironmentBlock() = default;
 
-    ~EnvironmentBlock() {
+    ~EnvironmentBlock()
+    {
         reset();
     }
 
     EnvironmentBlock(const EnvironmentBlock&) = delete;
     EnvironmentBlock& operator=(const EnvironmentBlock&) = delete;
 
-    [[nodiscard]] void* get() const noexcept {
+    [[nodiscard]] void* get() const noexcept
+    {
         return environment_;
     }
 
-    [[nodiscard]] void** put() noexcept {
+    [[nodiscard]] void** put() noexcept
+    {
         reset();
         return &environment_;
     }
 
-    void reset() noexcept {
+    void reset() noexcept
+    {
         if (environment_ != nullptr) {
             DestroyEnvironmentBlock(environment_);
             environment_ = nullptr;
@@ -147,7 +163,8 @@ private:
     void* environment_ = nullptr;
 };
 
-std::wstring quotePath(const std::filesystem::path& path) {
+std::wstring quotePath(const std::filesystem::path& path)
+{
     return L"\"" + path.wstring() + L"\"";
 }
 
@@ -155,7 +172,8 @@ std::wstring quotePath(const std::filesystem::path& path) {
 
 namespace antivirus::service {
 
-bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launched) const {
+bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launched) const
+{
     common::log_info(L"Preparing to launch GUI in session " + std::to_wstring(sessionId));
 
     HANDLE userTokenRaw = nullptr;
@@ -221,8 +239,7 @@ bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launc
         return false;
     }
 
-    std::wstring commandLine =
-        quotePath(guiPath) + L" --hidden --service-child";
+    std::wstring commandLine = quotePath(guiPath) + L" --hidden --service-child";
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -253,6 +270,8 @@ bool ProcessLauncher::launchGuiInSession(DWORD sessionId, LaunchedProcess& launc
     }
 
     Handle threadHandle(processInfo.hThread);
+
+    common::hardenProcessHandleForDemo(processInfo.hProcess, L"AntivirusGui.exe child", true);
 
     launched.processHandle = processInfo.hProcess;
     launched.processId = processInfo.dwProcessId;

@@ -96,6 +96,8 @@ add_library(AntivirusCommon STATIC
     src/common/app_paths.h
     src/common/logging.cpp
     src/common/logging.h
+    src/common/process_hardening.cpp
+    src/common/process_hardening.h
     src/common/win_error.cpp
     src/common/win_error.h
 )
@@ -114,7 +116,7 @@ target_compile_definitions(AntivirusCommon
 )
 
 if(MSVC)
-    target_compile_options(AntivirusCommon PRIVATE /W4 /permissive-)
+    target_compile_options(AntivirusCommon PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(AntivirusCommon PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -128,10 +130,16 @@ if(ANTIVIRUS_BUILD_GUI)
         src/gui/AppLifecycle.h
         src/gui/MainWindow.cpp
         src/gui/MainWindow.h
+        src/gui/AuthDialog.cpp
+        src/gui/AuthDialog.h
+        src/gui/ActivationDialog.cpp
+        src/gui/ActivationDialog.h
         src/gui/ParentProcessCheck.cpp
         src/gui/ParentProcessCheck.h
         src/gui/RpcClient.cpp
         src/gui/RpcClient.h
+        src/gui/SecureStopConfirmation.cpp
+        src/gui/SecureStopConfirmation.h
         src/gui/ServiceClient.cpp
         src/gui/ServiceClient.h
         src/gui/SingleInstanceGuard.cpp
@@ -147,10 +155,17 @@ if(ANTIVIRUS_BUILD_GUI)
             AntivirusRpcClient
             Qt6::Widgets
             Advapi32
+            Credui
             Rpcrt4
     )
 
     target_compile_definitions(AntivirusGui PRIVATE ANTIVIRUS_APP_VERSION="${PROJECT_VERSION}")
+
+    if(MSVC)
+        target_compile_options(AntivirusGui PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(AntivirusGui PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
 
     install(TARGETS AntivirusGui RUNTIME DESTINATION bin)
 endif()
@@ -159,6 +174,14 @@ if(ANTIVIRUS_BUILD_SERVICE)
     add_executable(AntivirusService
         src/service/ProcessLauncher.cpp
         src/service/ProcessLauncher.h
+        src/service/AuthHttpClient.cpp
+        src/service/AuthHttpClient.h
+        src/service/AuthManager.cpp
+        src/service/AuthManager.h
+        src/service/FeatureGate.cpp
+        src/service/FeatureGate.h
+        src/service/LicenseManager.cpp
+        src/service/LicenseManager.h
         src/service/RpcServer.cpp
         src/service/RpcServer.h
         src/service/ServiceMain.cpp
@@ -175,13 +198,14 @@ if(ANTIVIRUS_BUILD_SERVICE)
             Advapi32
             Rpcrt4
             Userenv
+            Winhttp
             Wtsapi32
     )
 
     target_compile_definitions(AntivirusService PRIVATE ANTIVIRUS_APP_VERSION="${PROJECT_VERSION}")
 
     if(MSVC)
-        target_compile_options(AntivirusService PRIVATE /W4 /permissive-)
+        target_compile_options(AntivirusService PRIVATE /W4 /permissive- /utf-8)
     else()
         target_compile_options(AntivirusService PRIVATE -Wall -Wextra -Wpedantic)
     endif()

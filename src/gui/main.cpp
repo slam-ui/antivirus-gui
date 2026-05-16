@@ -1,4 +1,5 @@
 #include "common/logging.h"
+#include "common/process_hardening.h"
 #include "gui/AppLifecycle.h"
 #include "gui/MainWindow.h"
 #include "gui/ParentProcessCheck.h"
@@ -72,13 +73,14 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+    antivirus::common::hardenCurrentProcessForDemo(L"AntivirusGui.exe", true);
     antivirus::common::log_info(L"Starting GUI");
 
     antivirus::gui::AppLifecycle lifecycle;
     antivirus::gui::RpcClient rpcClient;
     lifecycle.setRpcClient(&rpcClient);
 
-    antivirus::gui::MainWindow window(lifecycle);
+    antivirus::gui::MainWindow window(lifecycle, rpcClient);
     antivirus::gui::TrayController trayController(window, lifecycle);
     lifecycle.setTrayController(&trayController);
 

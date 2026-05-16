@@ -2,6 +2,7 @@
 
 #include "common/logging.h"
 #include "gui/RpcClient.h"
+#include "gui/SecureStopConfirmation.h"
 #include "gui/TrayController.h"
 
 #include <QCoreApplication>
@@ -20,6 +21,11 @@ void AppLifecycle::setRpcClient(RpcClient* rpcClient)
 
 void AppLifecycle::quitApplication()
 {
+    if (!confirmServiceStopOnSecureDesktop()) {
+        antivirus::common::log_info(L"Service stop cancelled by user");
+        return;
+    }
+
     if (rpcClient_ != nullptr && !rpcClient_->requestServiceStop()) {
         antivirus::common::log_warning(L"Service stop RPC request failed; quitting GUI locally");
     }
