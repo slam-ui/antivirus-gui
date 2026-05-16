@@ -98,6 +98,8 @@ add_library(AntivirusCommon STATIC
     src/common/logging.h
     src/common/process_hardening.cpp
     src/common/process_hardening.h
+    src/common/security/process_dacl.cpp
+    src/common/security/process_dacl.h
     src/common/win_error.cpp
     src/common/win_error.h
 )
@@ -140,6 +142,8 @@ if(ANTIVIRUS_BUILD_GUI)
         src/gui/RpcClient.h
         src/gui/SecureStopConfirmation.cpp
         src/gui/SecureStopConfirmation.h
+        src/gui/security_hardening.cpp
+        src/gui/security_hardening.h
         src/gui/ServiceClient.cpp
         src/gui/ServiceClient.h
         src/gui/SingleInstanceGuard.cpp
@@ -193,6 +197,10 @@ if(ANTIVIRUS_BUILD_SERVICE)
     add_executable(AntivirusService
         src/service/ProcessLauncher.cpp
         src/service/ProcessLauncher.h
+        src/service/SecureStopConfirmation.cpp
+        src/service/SecureStopConfirmation.h
+        src/service/security_hardening.cpp
+        src/service/security_hardening.h
         src/service/AuthHttpClient.cpp
         src/service/AuthHttpClient.h
         src/service/AuthManager.cpp
@@ -215,6 +223,7 @@ if(ANTIVIRUS_BUILD_SERVICE)
             AntivirusCommon
             AntivirusRpcServer
             Advapi32
+            Credui
             Rpcrt4
             Userenv
             Winhttp

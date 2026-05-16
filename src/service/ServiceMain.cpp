@@ -6,7 +6,9 @@
 #include "service/FeatureGate.h"
 #include "service/LicenseManager.h"
 #include "service/RpcServer.h"
+#include "service/SecureStopConfirmation.h"
 #include "service/SessionManager.h"
+#include "service/security_hardening.h"
 
 #include <string>
 #include <windows.h>
@@ -61,6 +63,7 @@ public:
         g_runtime = this;
 
         setStatus(SERVICE_START_PENDING);
+        applyServiceSecurityHardening();
 
         if (!rpcServer_.start()) {
             setStatus(SERVICE_STOPPED);
@@ -85,11 +88,17 @@ public:
         return 0;
     }
 
-    void requestStop()
+    bool requestStop()
     {
+        if (!confirmServiceStopOnSecureDesktop()) {
+            return false;
+        }
+
         if (stopEvent_ != nullptr) {
             SetEvent(stopEvent_);
         }
+
+        return true;
     }
 
     long currentState() const
@@ -199,11 +208,13 @@ void WINAPI serviceMain(DWORD, LPWSTR*)
 
 } // namespace
 
-void requestServiceStopFromRpc()
+bool requestServiceStopFromRpc()
 {
     if (g_runtime != nullptr) {
-        g_runtime->requestStop();
+        return g_runtime->requestStop();
     }
+
+    return false;
 }
 
 long queryServiceStateFromRpc()

@@ -15,7 +15,7 @@ private:
     bool started_ = false;
 };
 
-void requestServiceStopFromRpc();
+bool requestServiceStopFromRpc();
 long queryServiceStateFromRpc();
 AuthState queryAuthStateFromRpc();
 AuthState loginFromRpc(const wchar_t* login, const wchar_t* password);
