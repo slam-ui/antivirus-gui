@@ -188,6 +188,12 @@ if(ANTIVIRUS_BUILD_SERVICE)
         src/service/ServiceMain.h
         src/service/SessionManager.cpp
         src/service/SessionManager.h
+        src/service/scan/AvDatabase.cpp
+        src/service/scan/AvDatabase.h
+        src/service/scan/FileScanner.cpp
+        src/service/scan/FileScanner.h
+        src/service/scan/ScanEngine.cpp
+        src/service/scan/ScanEngine.h
         src/service/main.cpp
     )
 
